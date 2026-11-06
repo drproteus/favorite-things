@@ -7,16 +7,35 @@ import { btnPrimary, input } from '../ui'
 import ItemCard from './ItemCard'
 import { EmptyState, ErrorState, Loading } from './Status'
 
+export interface Selection {
+  active: boolean
+  selected: Set<string>
+  onToggle: (id: string) => void
+}
+
 interface Props {
   scope: ItemFilter['scope']
   title: string
   subtitle: string
   actions?: ReactNode
   collectionId?: string
+  // Shown between the header and the search toolbar, e.g. a breadcrumb.
   before?: ReactNode
+  // Shown below the search toolbar, e.g. subfolders.
+  folders?: ReactNode
+  selection?: Selection
 }
 
-export default function ItemBrowser({ scope, title, subtitle, actions, collectionId, before }: Props) {
+export default function ItemBrowser({
+  scope,
+  title,
+  subtitle,
+  actions,
+  collectionId,
+  before,
+  folders,
+  selection,
+}: Props) {
   const mine = scope === 'mine'
   const [q, setQ] = useState('')
   const [tag, setTag] = useState('')
@@ -85,27 +104,41 @@ export default function ItemBrowser({ scope, title, subtitle, actions, collectio
         )}
       </div>
 
+      {folders}
+
       {items.isPending && <Loading />}
       {items.isError && <ErrorState message={items.error.message} />}
       {items.data &&
         (items.data.length === 0 ? (
-          <EmptyState icon={<Compass size={40} />} title={mine ? 'Nothing here yet' : 'No items found'}>
-            {mine ? (
-              <Link to="/items/new" className={`${btnPrimary} mt-3`}>
-                <Plus size={16} /> Add your first item
-              </Link>
-            ) : (
-              'Try a different search, or make some of your items public.'
-            )}
-          </EmptyState>
+          !folders && (
+            <EmptyState icon={<Compass size={40} />} title={mine ? 'Nothing here yet' : 'No items found'}>
+              {mine ? (
+                <Link to="/items/new" className={`${btnPrimary} mt-3`}>
+                  <Plus size={16} /> Add your first item
+                </Link>
+              ) : (
+                'Try a different search, or make some of your items public.'
+              )}
+            </EmptyState>
+          )
         ) : (
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {items.data.map((item) => (
-              <ItemCard key={item.id} item={item} />
+              <ItemCard
+                key={item.id}
+                item={item}
+                select={
+                  selection?.active
+                    ? {
+                        selected: selection.selected.has(item.id),
+                        onToggle: () => selection.onToggle(item.id),
+                      }
+                    : undefined
+                }
+              />
             ))}
           </div>
         ))}
-
     </div>
   )
 }

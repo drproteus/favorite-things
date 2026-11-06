@@ -19,15 +19,18 @@ export function pathTo(list: Collection[], id: string): Collection[] {
   return path
 }
 
-// Every folder in tree order with its depth. Passing excludeId skips that folder and everything under it.
-export function flattenFolders(list: Collection[], excludeId?: string): { folder: Collection; depth: number }[] {
+// Every folder in tree order with its depth. Each excluded folder is skipped along with everything under it.
+export function flattenFolders(
+  list: Collection[],
+  exclude: string[] = [],
+): { folder: Collection; depth: number }[] {
   const root = rootFolder(list)
   if (!root) return []
   const out: { folder: Collection; depth: number }[] = []
   const walk = (folder: Collection, depth: number) => {
     out.push({ folder, depth })
     for (const child of childrenOf(list, folder.id)) {
-      if (child.id !== excludeId) walk(child, depth + 1)
+      if (!exclude.includes(child.id)) walk(child, depth + 1)
     }
   }
   walk(root, 0)

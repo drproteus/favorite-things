@@ -1,18 +1,21 @@
+import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { Globe, ImageOff, Lock } from 'lucide-react'
+import { Check, Globe, ImageOff, Lock } from 'lucide-react'
 import type { Item } from '../types'
 import { card, chip } from '../ui'
 import StarRating from './StarRating'
 
-export default function ItemCard({ item }: { item: Item }) {
+interface Props {
+  item: Item
+  select?: { selected: boolean; onToggle: () => void }
+}
+
+export default function ItemCard({ item, select }: Props) {
   const cover = item.images[0]?.url
   const isPublic = item.visibility === 'public'
 
-  return (
-    <Link
-      to={`/items/${item.id}`}
-      className={`group ${card} flex flex-col overflow-hidden transition hover:-translate-y-0.5 hover:shadow-md`}
-    >
+  const body: ReactNode = (
+    <>
       <div className="aspect-4/3 bg-stone-100 dark:bg-stone-800">
         {cover ? (
           <img src={cover} alt="" loading="lazy" className="h-full w-full object-cover transition group-hover:scale-105" />
@@ -43,6 +46,46 @@ export default function ItemCard({ item }: { item: Item }) {
           ))}
         </div>
       </div>
+    </>
+  )
+
+  if (select) {
+    return (
+      <button
+        type="button"
+        onClick={select.onToggle}
+        aria-pressed={select.selected}
+        className={`group relative ${card} flex cursor-pointer flex-col overflow-hidden text-left transition ${
+          select.selected ? 'ring-2 ring-indigo-500' : 'hover:shadow-md'
+        }`}
+      >
+        <SelectMark selected={select.selected} />
+        {body}
+      </button>
+    )
+  }
+
+  return (
+    <Link
+      to={`/items/${item.id}`}
+      className={`group ${card} flex flex-col overflow-hidden transition hover:-translate-y-0.5 hover:shadow-md`}
+    >
+      {body}
     </Link>
+  )
+}
+
+export function SelectMark({ selected }: { selected: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`absolute top-2 left-2 z-10 flex h-6 w-6 items-center justify-center rounded-full border-2 shadow-sm ${
+        selected
+          ? 'border-indigo-600 bg-indigo-600 text-white'
+          : 'border-white bg-white/80 text-transparent dark:border-stone-900 dark:bg-stone-900/80'
+      }`}
+    >
+      <Check size={14} />
+    </span>
   )
 }

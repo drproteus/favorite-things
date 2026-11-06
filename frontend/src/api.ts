@@ -75,4 +75,12 @@ export const api = {
     request<Collection>(`/collections/${id}`, { method: 'PUT', json: input }),
   deleteCollection: (id: string, contents: DeleteContents) =>
     request<void>(`/collections/${id}?contents=${contents}`, { method: 'DELETE' }),
+
+  bulkMoveItems: (ids: string[], collectionId: string) =>
+    request<void>('/items/bulk/move', { method: 'POST', json: { ids, collectionId } }),
+  bulkDeleteItems: (ids: string[]) => request<void>('/items/bulk/delete', { method: 'POST', json: { ids } }),
+  bulkMoveCollections: (ids: string[], parentId: string) =>
+    request<void>('/collections/bulk/move', { method: 'POST', json: { ids, parentId } }),
+  bulkDeleteCollections: (ids: string[], contents: DeleteContents) =>
+    request<void>(`/collections/bulk/delete?contents=${contents}`, { method: 'POST', json: { ids } }),
 }

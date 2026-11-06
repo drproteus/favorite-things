@@ -12,6 +12,7 @@ A personal inventory and collection app. Catalog anything you collect (consoles,
 - Folders: every user has a root folder, and folders nest under it to any depth. Each item sits in one folder. Folders can be moved, renamed and set public or private
 - A private folder hides everything inside it, even items marked public
 - Deleting a folder asks whether to delete its contents or move them up one level. Deleting everything is the default
+- Select mode in My collection: pick items and folders, then move them to another folder or delete them together
 - Public or private visibility, toggled from the item page or the edit form
 - Explore page for public items, with search and tag filters
 - Drag-and-drop or browse to add photos
@@ -139,6 +140,10 @@ This starts Postgres, MinIO and the app at http://localhost:8080. Put your OAuth
 | POST | `/api/collections` | yes | Create `{ "name", "visibility", "parentId" }` (parent defaults to root) |
 | PUT | `/api/collections/{id}` | owner | Update `{ "name", "visibility", "parentId" }`; moves the folder. The root can't be changed |
 | DELETE | `/api/collections/{id}?contents=delete\|move` | owner | Delete a folder. `delete` (default) removes everything inside it; `move` moves the contents up to the parent |
+| POST | `/api/items/bulk/move` | owner | Move items `{ "ids": [...], "collectionId" }`. All or nothing |
+| POST | `/api/items/bulk/delete` | owner | Delete items `{ "ids": [...] }`. Items you don't own are skipped |
+| POST | `/api/collections/bulk/move` | owner | Move folders `{ "ids": [...], "parentId" }`. All or nothing |
+| POST | `/api/collections/bulk/delete?contents=delete\|move` | owner | Delete folders `{ "ids": [...] }`, with the same `contents` choice as above. All or nothing |
 | GET | `/api/tags` | yes | Hashtags used on your items (for the filter) |
 
 ## Tests and checks

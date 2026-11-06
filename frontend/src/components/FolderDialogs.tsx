@@ -5,7 +5,7 @@ import { childrenOf, flattenFolders } from '../folders'
 import type { Collection, DeleteContents, Visibility } from '../types'
 import { btnDanger, btnPrimary, btnSecondary, card, input, label } from '../ui'
 
-function Modal({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) {
+export function Modal({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/40 p-4" onMouseDown={onClose}>
       <div
@@ -79,7 +79,7 @@ export function FolderFormDialog({ folders, folder, defaultParentId, onClose }: 
               Inside
             </label>
             <select id="folder-parent" className={input} value={parentId} onChange={(e) => setParentId(e.target.value)}>
-              {flattenFolders(folders, folder?.id).map(({ folder: f, depth }) => (
+              {flattenFolders(folders, folder ? [folder.id] : []).map(({ folder: f, depth }) => (
                 <option key={f.id} value={f.id}>
                   {'\u2003'.repeat(depth)}
                   {f.parentId === null ? 'My collection' : f.name}
