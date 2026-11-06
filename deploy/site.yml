@@ -85,6 +85,22 @@
       ansible.builtin.debug:
         msg: "{{ build_result.stdout_lines }}"
 
+    - name: Install frontend dependencies
+      ansible.builtin.command:
+        cmd: npm ci --no-audit --no-fund
+        chdir: "{{ playbook_dir }}/../frontend"
+      delegate_to: localhost
+      become: false
+      changed_when: true
+
+    - name: Build the frontend
+      ansible.builtin.command:
+        cmd: npm run build
+        chdir: "{{ playbook_dir }}/../frontend"
+      delegate_to: localhost
+      become: false
+      changed_when: true
+
   handlers:
     - name: Restart PostgreSQL
       ansible.builtin.systemd:
@@ -160,6 +176,7 @@
         mode: "{{ item.mode }}"
       loop:
         - { path: "{{ favorite_things_install_dir }}", owner: root, group: root, mode: "0755" }
+        - { path: "{{ favorite_things_web_dir }}", owner: root, group: root, mode: "0755" }
         - { path: "{{ favorite_things_config_dir }}", owner: root, group: "{{ favorite_things_group }}", mode: "0750" }
         - { path: "{{ favorite_things_letsencrypt_webroot }}/.well-known/acme-challenge", owner: root, group: root, mode: "0755" }
 
@@ -189,31 +206,48 @@
         name: postgresql
         state: restarted
 
-    - name: Create the database user and database
+    - name: Create or update the database role
       ansible.builtin.shell:
         cmd: |
-          sudo -u postgres psql << 'EOSQL'
-          -- Create role if it doesn't exist
+          sudo -u postgres psql -v ON_ERROR_STOP=1 << 'EOSQL'
           DO $$
           BEGIN
             IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{{ favorite_things_db_user }}') THEN
               CREATE ROLE {{ favorite_things_db_user }} WITH LOGIN PASSWORD '{{ favorite_things_db_password }}' NOSUPERUSER NOCREATEDB NOCREATEROLE;
-            END IF;
-          END
-          $$;
-          
-          -- Create database if it doesn't exist
-          DO $$
-          BEGIN
-            IF NOT EXISTS (SELECT FROM pg_database WHERE datname = '{{ favorite_things_db_name }}') THEN
-              CREATE DATABASE {{ favorite_things_db_name }} OWNER {{ favorite_things_db_user }};
+            ELSE
+              ALTER ROLE {{ favorite_things_db_user }} WITH LOGIN PASSWORD '{{ favorite_things_db_password }}' NOSUPERUSER NOCREATEDB NOCREATEROLE;
             END IF;
           END
           $$;
           EOSQL
       no_log: true
       changed_when: false
-      failed_when: false
+
+    - name: Check whether the database exists
+      ansible.builtin.command:
+        argv:
+          - sudo
+          - -u
+          - postgres
+          - psql
+          - -tAc
+          - "SELECT 1 FROM pg_database WHERE datname = '{{ favorite_things_db_name }}'"
+      register: favorite_things_db_exists
+      changed_when: false
+
+    # CREATE DATABASE cannot run inside a DO block or transaction, so it has to
+    # be a separate statement.
+    - name: Create the database
+      ansible.builtin.command:
+        argv:
+          - sudo
+          - -u
+          - postgres
+          - createdb
+          - -O
+          - "{{ favorite_things_db_user }}"
+          - "{{ favorite_things_db_name }}"
+      when: favorite_things_db_exists.stdout | trim != "1"
 
     - name: Install the API binary
       ansible.builtin.copy:
@@ -222,6 +256,16 @@
         owner: root
         group: root
         mode: "0755"
+      notify: Restart favorite-things
+
+    - name: Install the frontend
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../frontend/dist/"
+        dest: "{{ favorite_things_web_dir }}/"
+        owner: root
+        group: root
+        mode: "0644"
+        directory_mode: "0755"
       notify: Restart favorite-things
 
     - name: Install the environment file
@@ -360,6 +404,16 @@
           retries: 30
           delay: 2
           until: favorite_things_health.status == 200
+          changed_when: false
+
+        - name: Wait for the web interface to become available
+          ansible.builtin.uri:
+            url: "http://{{ favorite_things_listen_host }}:{{ favorite_things_listen_port }}/"
+            status_code: 200
+          register: favorite_things_web
+          retries: 30
+          delay: 2
+          until: favorite_things_web.status == 200
           changed_when: false
 
       rescue:

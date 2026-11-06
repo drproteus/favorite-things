@@ -10,6 +10,7 @@ favorite_things_user: favorite-things
 favorite_things_group: favorite-things
 
 favorite_things_install_dir: /opt/favorite-things
+favorite_things_web_dir: "{{ favorite_things_install_dir }}/web"
 favorite_things_config_dir: /etc/favorite-things
 favorite_things_build_dir: "{{ playbook_dir }}/.build"
 

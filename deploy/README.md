@@ -17,8 +17,9 @@ no user or key is stored in the inventory.
 - The target has SSH access via your `~/.ssh/config` entry for `things.skinet.org`, with sudo access.
 - Ports 80/443 are reachable from the internet.
 - DNS for `things.skinet.org` points at the target.
-- The controller has Ansible and Go installed. The playbook cross-compiles the
-  binary locally for the target's architecture (`amd64` or `arm64`).
+- The controller has Ansible, Go and Node.js 24+ installed (the playbook
+  cross-compiles the API locally for the target's architecture and builds the
+  React app).
 - You have AWS S3 credentials and a bucket already created.
 
 ## First-time setup
@@ -96,13 +97,12 @@ ssh things.skinet.org 'nginx -t'
 
 ## Frontend deployment
 
-The Vite-built frontend is static HTML/JS. Deploy it via:
+The playbook builds the React app on the controller (`npm ci && npm run build`),
+copies `frontend/dist/` to `/opt/favorite-things/web`, and sets `WEB_DIR` so the
+API serves it with the SPA fallback. nginx proxies everything to the API.
 
-1. **S3**: Upload `frontend/dist/` to your S3 bucket and configure nginx to proxy or serve it.
-2. **CDN**: Push the dist folder to a CDN for geographic distribution.
-3. **Same server**: Copy `frontend/dist/` to `/var/www/html/favorite-things/` and configure nginx to serve it.
-
-This playbook does not manage the frontend. Adjust nginx configuration (`templates/nginx-site.conf.j2`) as needed.
+Re-run the playbook to deploy frontend changes. Only the changed files are
+copied, and the service restarts only when the files or environment change.
 
 ## Notes
 
@@ -132,6 +132,7 @@ S3_PATH_STYLE             "false" for AWS S3
 AWS_ACCESS_KEY_ID         AWS IAM user access key
 AWS_SECRET_ACCESS_KEY     AWS IAM user secret key
 ADDR                      Listen address (127.0.0.1:8080)
+WEB_DIR                   Built frontend directory (/opt/favorite-things/web)
 PUBLIC_URL                Public HTTPS origin (https://things.skinet.org)
 FRONTEND_URL              Post-login redirect origin (https://things.skinet.org)
 COOKIE_SECURE             "true" because the site is served over HTTPS
