@@ -53,11 +53,11 @@ Register the OAuth callback URLs with the providers:
 
 ## Deploy
 
-From this directory:
+From this directory, run the playbook with the inventory file:
 
 ```bash
 cd deploy
-ansible-playbook site.yml --ask-vault-pass --ask-become-pass
+ansible-playbook site.yml -i hosts.ini --ask-vault-pass --ask-become-pass
 ```
 
 The playbook reads the target from `hosts.ini` (which is `things.skinet.org`) and uses your SSH config for authentication.
@@ -78,7 +78,7 @@ restarts the service, and reloads nginx when configuration changes:
 
 ```bash
 cd deploy
-ansible-playbook site.yml --ask-vault-pass
+ansible-playbook site.yml -i hosts.ini --ask-vault-pass
 ```
 
 ## Checking the deployment

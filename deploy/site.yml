@@ -1,6 +1,6 @@
 ---
 - name: Deploy Favorite Things
-  hosts: all
+  hosts: things.skinet.org
   become: true
   gather_facts: true
   any_errors_fatal: true
