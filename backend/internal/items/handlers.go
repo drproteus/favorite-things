@@ -90,6 +90,32 @@ func (h *Handler) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/tags", auth.RequireUser(h.tags))
 	mux.HandleFunc("POST /api/items/bulk/move", auth.RequireUser(h.bulkMove))
 	mux.HandleFunc("POST /api/items/bulk/delete", auth.RequireUser(h.bulkDelete))
+	mux.HandleFunc("POST /api/items/bulk/visibility", auth.RequireUser(h.bulkVisibility))
+}
+
+func (h *Handler) bulkVisibility(w http.ResponseWriter, r *http.Request) {
+	u := auth.UserFrom(r.Context())
+	var in struct {
+		IDs        []string `json:"ids"`
+		Visibility string   `json:"visibility"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		httpx.Error(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	ids, ok := httpx.UUIDList(w, in.IDs)
+	if !ok {
+		return
+	}
+	if in.Visibility != "public" && in.Visibility != "private" {
+		httpx.Error(w, http.StatusBadRequest, "visibility must be public or private")
+		return
+	}
+	if _, err := h.store.SetVisibilityMany(r.Context(), u.ID, ids, in.Visibility); err != nil {
+		httpx.Internal(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) bulkMove(w http.ResponseWriter, r *http.Request) {

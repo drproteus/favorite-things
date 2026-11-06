@@ -99,6 +99,13 @@ func get(ctx context.Context, q queryer, userID, id string) (*Collection, error)
 }
 
 func (s *Store) Create(ctx context.Context, userID, parentID, name, visibility string) (Collection, error) {
+	parent, err := get(ctx, s.pool, userID, parentID)
+	if err != nil {
+		return Collection{}, err
+	}
+	if parent == nil {
+		return Collection{}, ErrNotFound
+	}
 	row := s.pool.QueryRow(ctx, `
 		INSERT INTO collections (owner_id, parent_id, name, visibility)
 		VALUES ($1::uuid, $2::uuid, $3, $4)
@@ -109,7 +116,8 @@ func (s *Store) Create(ctx context.Context, userID, parentID, name, visibility s
 }
 
 // Update changes a folder's name, visibility and parent. The root folder can't be changed.
-func (s *Store) Update(ctx context.Context, userID, id, name, visibility, parentID string) (Collection, error) {
+// With recursive, the visibility also applies to every subfolder and item inside the folder.
+func (s *Store) Update(ctx context.Context, userID, id, name, visibility, parentID string, recursive bool) (Collection, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return Collection{}, err
@@ -139,7 +147,56 @@ func (s *Store) Update(ctx context.Context, userID, id, name, visibility, parent
 	if err != nil {
 		return Collection{}, mapErr(err)
 	}
+	if recursive {
+		if err := applyVisibility(ctx, tx, id, visibility); err != nil {
+			return Collection{}, err
+		}
+	}
 	return c, tx.Commit(ctx)
+}
+
+// SetVisibilityMany changes the visibility of several folders in one transaction. Folders the user
+// doesn't own are skipped. With recursive, each folder's subfolders and items change too.
+func (s *Store) SetVisibilityMany(ctx context.Context, userID string, ids []string, visibility string, recursive bool) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	for _, id := range ids {
+		current, err := get(ctx, tx, userID, id)
+		if err != nil {
+			return err
+		}
+		if current == nil {
+			continue
+		}
+		if current.ParentID == nil {
+			return ErrRoot
+		}
+		if _, err := tx.Exec(ctx, `UPDATE collections SET visibility = $3, updated_at = now() WHERE id = $2::uuid AND owner_id = $1::uuid`,
+			userID, id, visibility); err != nil {
+			return err
+		}
+		if recursive {
+			if err := applyVisibility(ctx, tx, id, visibility); err != nil {
+				return err
+			}
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+// applyVisibility sets visibility on the folder's subfolders and on every item inside them.
+func applyVisibility(ctx context.Context, tx pgx.Tx, id, visibility string) error {
+	if _, err := tx.Exec(ctx, subtreeCTE+`
+		UPDATE collections SET visibility = $2, updated_at = now() WHERE id IN (SELECT id FROM subtree)`, id, visibility); err != nil {
+		return err
+	}
+	_, err := tx.Exec(ctx, subtreeCTE+`
+		UPDATE items SET visibility = $2, updated_at = now() WHERE collection_id IN (SELECT id FROM subtree)`, id, visibility)
+	return err
 }
 
 // Delete removes a folder. With DeleteContents it also removes everything inside and returns the
@@ -158,7 +215,8 @@ func (s *Store) Delete(ctx context.Context, userID, id string, mode DeleteMode) 
 	return keys, tx.Commit(ctx)
 }
 
-// MoveMany moves several folders under parentID in one transaction. If any move fails, none apply.
+// MoveMany moves several folders under parentID in one transaction. Folders the user doesn't own
+// are skipped. Any other failure rolls the whole batch back.
 func (s *Store) MoveMany(ctx context.Context, userID string, ids []string, parentID string) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -166,8 +224,19 @@ func (s *Store) MoveMany(ctx context.Context, userID string, ids []string, paren
 	}
 	defer tx.Rollback(ctx)
 
+	destination, err := get(ctx, tx, userID, parentID)
+	if err != nil {
+		return err
+	}
+	if destination == nil {
+		return ErrNotFound
+	}
 	for _, id := range ids {
-		if err := moveInTx(ctx, tx, userID, id, parentID); err != nil {
+		err := moveInTx(ctx, tx, userID, id, parentID)
+		if errors.Is(err, ErrNotFound) {
+			continue
+		}
+		if err != nil {
 			return err
 		}
 	}

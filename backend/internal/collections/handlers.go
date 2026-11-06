@@ -33,6 +33,33 @@ func (h *Handler) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/collections/{id}", auth.RequireUser(h.delete))
 	mux.HandleFunc("POST /api/collections/bulk/move", auth.RequireUser(h.bulkMove))
 	mux.HandleFunc("POST /api/collections/bulk/delete", auth.RequireUser(h.bulkDelete))
+	mux.HandleFunc("POST /api/collections/bulk/visibility", auth.RequireUser(h.bulkVisibility))
+}
+
+func (h *Handler) bulkVisibility(w http.ResponseWriter, r *http.Request) {
+	u := auth.UserFrom(r.Context())
+	var in struct {
+		IDs        []string `json:"ids"`
+		Visibility string   `json:"visibility"`
+		Recursive  bool     `json:"recursive"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		httpx.Error(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	ids, ok := httpx.UUIDList(w, in.IDs)
+	if !ok {
+		return
+	}
+	if in.Visibility != "public" && in.Visibility != "private" {
+		httpx.Error(w, http.StatusBadRequest, "visibility must be public or private")
+		return
+	}
+	if err := h.store.SetVisibilityMany(r.Context(), u.ID, ids, in.Visibility, in.Recursive); err != nil {
+		h.writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) bulkMove(w http.ResponseWriter, r *http.Request) {
@@ -110,6 +137,7 @@ type body struct {
 	Name       string `json:"name"`
 	Visibility string `json:"visibility"`
 	ParentID   string `json:"parentId"`
+	Recursive  bool   `json:"recursive"`
 }
 
 func (b *body) normalize() error {
@@ -187,7 +215,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	c, err := h.store.Update(r.Context(), u.ID, id, in.Name, in.Visibility, parentID)
+	c, err := h.store.Update(r.Context(), u.ID, id, in.Name, in.Visibility, parentID, in.Recursive)
 	if err != nil {
 		h.writeError(w, err)
 		return

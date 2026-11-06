@@ -245,6 +245,17 @@ func (s *Store) MoveMany(ctx context.Context, ownerID string, ids []string, fold
 	return tag.RowsAffected(), nil
 }
 
+// SetVisibilityMany changes the visibility of the owner's items and returns how many changed.
+func (s *Store) SetVisibilityMany(ctx context.Context, ownerID string, ids []string, visibility string) (int64, error) {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE items SET visibility = $3, updated_at = now()
+		WHERE owner_id = $1::uuid AND id = ANY($2::uuid[])`, ownerID, ids, visibility)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
 // DeleteMany deletes the owner's items and returns the storage keys of their photos.
 func (s *Store) DeleteMany(ctx context.Context, ownerID string, ids []string) ([]string, error) {
 	tx, err := s.pool.Begin(ctx)
