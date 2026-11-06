@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api'
 import { childrenOf, flattenFolders } from '../folders'
 import type { Collection, DeleteContents, Visibility } from '../types'
-import { btnDanger, btnPrimary, btnSecondary, card, input, label } from '../ui'
+import { btnDanger, btnDangerMuted, btnPrimary, btnSecondary, card, input, label } from '../ui'
 
 export function Modal({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) {
   return (
@@ -144,7 +144,7 @@ export function FolderFormDialog({ folders, folder, defaultParentId, onClose, on
 
         <div className="flex items-center gap-3">
           {editing && onDelete && (
-            <button type="button" onClick={onDelete} className={btnDanger}>
+            <button type="button" onClick={onDelete} className={btnDangerMuted}>
               Delete
             </button>
           )}

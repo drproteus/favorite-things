@@ -7,6 +7,8 @@ export const btnSecondary = `${base} border border-stone-300 bg-white text-stone
 
 export const btnDanger = `${base} bg-rose-600 text-white hover:bg-rose-500`
 
+export const btnDangerMuted = `${base} border border-stone-300 bg-stone-100 text-rose-700 hover:bg-rose-50 hover:text-rose-800 dark:border-stone-700 dark:bg-stone-800 dark:text-rose-400 dark:hover:bg-stone-700`
+
 export const btnGhost = `${base} px-2 py-1 text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-800`
 
 export const input =
