@@ -82,17 +82,17 @@ Prerequisites: Go 1.26+, Node 24+, Docker.
 
 ## Photo suggestions (optional)
 
-When enabled, adding the first photo to a new item asks Amazon Nova Lite on Bedrock for a title, description and hashtags. The form fills in only empty fields, and nothing is saved until you press Save. A **Suggest from photo** button re-runs it.
+When enabled, adding the first photo to a new item asks a vision model for a title, description and hashtags. The form fills in only empty fields, and nothing is saved until you press Save. A **Suggest from photo** button re-runs it.
 
-To try it locally:
+Gemini is the default provider:
 
-1. In the AWS console, open Amazon Bedrock in your region and enable model access for **Amazon Nova Lite**.
-2. Make sure your AWS identity can call `bedrock:InvokeModel`.
-3. Set credentials in `.env`: `AWS_PROFILE` (after `aws sso login`) or `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
-4. Set `SUGGEST_ENABLED=true`, then restart the API.
+1. Create a key at https://aistudio.google.com/app/apikey. No card is needed for the free tier.
+2. In `.env`, set `GEMINI_API_KEY`, `SUGGEST_ENABLED=true`, and optionally `GEMINI_MODEL` (default `gemini-3.8-flash`). Free-tier models change, so check the model is available in AI Studio.
+3. Restart the API.
+
+To use Amazon Nova Lite on Bedrock instead, set `SUGGEST_PROVIDER=bedrock`. That needs Bedrock model access for your account, an identity allowed to call `bedrock:InvokeModel`, and credentials from `AWS_PROFILE` or the access key settings.
 
 `SUGGEST_DAILY_LIMIT` caps calls per user per day. The count resets when the server restarts.
-
 ## Admin access
 
 Admin access is granted from the command line, not the web UI. The person must sign in at least once first, so their account exists.

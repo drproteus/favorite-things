@@ -31,9 +31,12 @@ type Config struct {
 	// Photo suggestions use Amazon Bedrock. Credentials come from the standard AWS chain:
 	// AWS_PROFILE, AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY, or an IAM role when deployed.
 	SuggestEnabled    bool
+	SuggestProvider   string // gemini or bedrock
+	SuggestDailyLimit int
+	GeminiAPIKey      string
+	GeminiModel       string
 	BedrockRegion     string
 	BedrockModelID    string
-	SuggestDailyLimit int
 }
 
 func Load() Config {
@@ -60,9 +63,12 @@ func Load() Config {
 		S3PathStyle:      envBool("S3_PATH_STYLE", true),
 
 		SuggestEnabled:    envBool("SUGGEST_ENABLED", false),
+		SuggestProvider:   env("SUGGEST_PROVIDER", "gemini"),
+		SuggestDailyLimit: envInt("SUGGEST_DAILY_LIMIT", 50),
+		GeminiAPIKey:      os.Getenv("GEMINI_API_KEY"),
+		GeminiModel:       env("GEMINI_MODEL", "gemini-3.8-flash"),
 		BedrockRegion:     env("BEDROCK_REGION", "us-east-1"),
 		BedrockModelID:    env("BEDROCK_MODEL_ID", "amazon.nova-lite-v1:0"),
-		SuggestDailyLimit: envInt("SUGGEST_DAILY_LIMIT", 50),
 	}
 }
 

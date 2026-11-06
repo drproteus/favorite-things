@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -56,12 +57,23 @@ func run() error {
 
 	var model suggest.Model
 	if cfg.SuggestEnabled {
-		bedrock, err := suggest.NewBedrock(ctx, cfg.BedrockRegion, cfg.BedrockModelID)
-		if err != nil {
-			return err
+		switch cfg.SuggestProvider {
+		case "gemini":
+			if cfg.GeminiAPIKey == "" {
+				return errors.New("SUGGEST_PROVIDER=gemini needs GEMINI_API_KEY")
+			}
+			model = suggest.NewGemini(cfg.GeminiAPIKey, cfg.GeminiModel)
+			slog.Info("photo suggestions enabled", "provider", "gemini", "model", cfg.GeminiModel)
+		case "bedrock":
+			bedrock, err := suggest.NewBedrock(ctx, cfg.BedrockRegion, cfg.BedrockModelID)
+			if err != nil {
+				return err
+			}
+			model = bedrock
+			slog.Info("photo suggestions enabled", "provider", "bedrock", "model", cfg.BedrockModelID, "region", cfg.BedrockRegion)
+		default:
+			return fmt.Errorf("SUGGEST_PROVIDER must be gemini or bedrock, not %q", cfg.SuggestProvider)
 		}
-		model = bedrock
-		slog.Info("photo suggestions enabled", "model", cfg.BedrockModelID, "region", cfg.BedrockRegion)
 	}
 	suggestH := suggest.NewHandler(cfg.SuggestEnabled, model, cfg.SuggestDailyLimit)
 
