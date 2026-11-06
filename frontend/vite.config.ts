@@ -5,6 +5,9 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
+    // Bind to all interfaces so the app is reachable from the Windows host
+    // when running inside WSL.
+    host: true,
     port: 5173,
     proxy: {
       '/api': 'http://localhost:8080',
