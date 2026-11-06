@@ -170,7 +170,7 @@
         role_attr_flags: NOSUPERUSER,NOCREATEDB,NOCREATEROLE
         state: present
         login_unix_socket: /var/run/postgresql
-      become: false
+        login_user: postgres
       no_log: true
 
     - name: Ensure the PostgreSQL database exists
@@ -179,7 +179,7 @@
         owner: "{{ favorite_things_db_user }}"
         state: present
         login_unix_socket: /var/run/postgresql
-      become: false
+        login_user: postgres
 
     - name: Check if MinIO is installed
       ansible.builtin.stat:
