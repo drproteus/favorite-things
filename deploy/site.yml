@@ -1,0 +1,362 @@
+---
+- name: Deploy Favorite Things
+  hosts: all
+  become: true
+  gather_facts: true
+  any_errors_fatal: true
+
+  pre_tasks:
+    - name: Check required secrets
+      ansible.builtin.assert:
+        that:
+          - favorite_things_db_password | length >= 16
+          - favorite_things_db_password is match('^[A-Za-z0-9._~-]+$')
+          - favorite_things_minio_root_password | length >= 16
+          - favorite_things_minio_root_password is match('^[A-Za-z0-9._~-]+$')
+          - favorite_things_letsencrypt_email | length > 0
+          - >-
+            (favorite_things_github_client_id | length > 0 and favorite_things_github_client_secret | length > 0) or
+            (favorite_things_google_client_id | length > 0 and favorite_things_google_client_secret | length > 0)
+        fail_msg: >-
+          Fill in deploy/group_vars/all/vault.yml (copy vault.yml.example). The
+          database password and MinIO root password must be URL-safe (letters,
+          digits, dot, underscore, tilde or hyphen) and at least 16 characters.
+          At least one OAuth provider must be configured.
+
+    - name: Check the target platform
+      ansible.builtin.assert:
+        that:
+          - ansible_os_family == "Debian"
+        fail_msg: >-
+          This playbook targets Debian or Ubuntu. Adapt the apt tasks for
+          another distribution before running it.
+
+    - name: Determine the Go architecture
+      ansible.builtin.set_fact:
+        favorite_things_goarch: "{{ {'x86_64': 'amd64', 'aarch64': 'arm64'}.get(ansible_architecture, '') }}"
+
+    - name: Check the target architecture
+      ansible.builtin.assert:
+        that:
+          - favorite_things_goarch | length > 0
+        fail_msg: >-
+          Unsupported architecture {{ ansible_architecture }}. Add it to the
+          architecture map in site.yml.
+
+    - name: Create the local build directory
+      ansible.builtin.file:
+        path: "{{ favorite_things_build_dir }}"
+        state: directory
+        mode: "0755"
+      delegate_to: localhost
+      become: false
+
+    - name: Build the API binary for the target
+      ansible.builtin.command:
+        argv:
+          - go
+          - build
+          - -trimpath
+          - -ldflags
+          - -s -w
+          - -o
+          - "{{ favorite_things_build_dir }}/favorite-things"
+          - ./cmd/server
+        chdir: "{{ playbook_dir }}/.."
+      environment:
+        GOOS: linux
+        GOARCH: "{{ favorite_things_goarch }}"
+        CGO_ENABLED: "0"
+      delegate_to: localhost
+      become: false
+      changed_when: true
+
+  handlers:
+    - name: Validate nginx configuration
+      ansible.builtin.command:
+        cmd: nginx -t
+      changed_when: false
+      listen: Reload nginx
+
+    - name: Reload nginx
+      ansible.builtin.systemd:
+        name: nginx
+        state: reloaded
+      listen: Reload nginx
+
+    - name: Restart favorite-things
+      ansible.builtin.systemd:
+        name: favorite-things
+        state: restarted
+        daemon_reload: true
+      listen: Restart favorite-things
+
+    - name: Restart minio
+      ansible.builtin.systemd:
+        name: minio
+        state: restarted
+        daemon_reload: true
+      listen: Restart minio
+
+  tasks:
+    - name: Install packages
+      ansible.builtin.apt:
+        name:
+          - postgresql
+          - python3-psycopg2
+          - nginx
+          - certbot
+          - curl
+          - wget
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Ensure PostgreSQL is running
+      ansible.builtin.systemd:
+        name: postgresql
+        state: started
+        enabled: true
+
+    - name: Ensure nginx is running
+      ansible.builtin.systemd:
+        name: nginx
+        state: started
+        enabled: true
+
+    - name: Create the system group
+      ansible.builtin.group:
+        name: "{{ favorite_things_group }}"
+        system: true
+
+    - name: Create the system user
+      ansible.builtin.user:
+        name: "{{ favorite_things_user }}"
+        group: "{{ favorite_things_group }}"
+        system: true
+        shell: /usr/sbin/nologin
+        home: "{{ favorite_things_install_dir }}"
+        create_home: false
+
+    - name: Create the install, config and ACME directories
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - { path: "{{ favorite_things_install_dir }}", owner: root, group: root, mode: "0755" }
+        - { path: "{{ favorite_things_config_dir }}", owner: root, group: "{{ favorite_things_group }}", mode: "0750" }
+        - { path: "{{ favorite_things_letsencrypt_webroot }}/.well-known/acme-challenge", owner: root, group: root, mode: "0755" }
+        - { path: "{{ favorite_things_minio_data_dir }}", owner: "{{ favorite_things_user }}", group: "{{ favorite_things_group }}", mode: "0750" }
+
+    - name: Ensure the PostgreSQL user exists
+      community.postgresql.postgresql_user:
+        name: "{{ favorite_things_db_user }}"
+        password: "{{ favorite_things_db_password }}"
+        role_attr_flags: NOSUPERUSER,NOCREATEDB,NOCREATEROLE
+        state: present
+        login_unix_socket: /var/run/postgresql
+      become_user: postgres
+      no_log: true
+
+    - name: Ensure the PostgreSQL database exists
+      community.postgresql.postgresql_db:
+        name: "{{ favorite_things_db_name }}"
+        owner: "{{ favorite_things_db_user }}"
+        state: present
+        login_unix_socket: /var/run/postgresql
+      become_user: postgres
+
+    - name: Check if MinIO is installed
+      ansible.builtin.stat:
+        path: /usr/local/bin/minio
+      register: favorite_things_minio_stat
+
+    - name: Download MinIO
+      ansible.builtin.get_url:
+        url: "https://dl.min.io/server/minio/release/linux-{{ favorite_things_goarch }}/minio"
+        dest: /usr/local/bin/minio
+        mode: "0755"
+      when: not favorite_things_minio_stat.stat.exists
+
+    - name: Install the API binary
+      ansible.builtin.copy:
+        src: "{{ favorite_things_build_dir }}/favorite-things"
+        dest: "{{ favorite_things_install_dir }}/favorite-things"
+        owner: root
+        group: root
+        mode: "0755"
+      notify: Restart favorite-things
+
+    - name: Install the environment file
+      ansible.builtin.template:
+        src: favorite-things.env.j2
+        dest: "{{ favorite_things_config_dir }}/favorite-things.env"
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+      notify: Restart favorite-things
+
+    - name: Install the systemd service for the API
+      ansible.builtin.template:
+        src: favorite-things.service.j2
+        dest: /etc/systemd/system/favorite-things.service
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart favorite-things
+
+    - name: Install the systemd service for MinIO
+      ansible.builtin.template:
+        src: minio.service.j2
+        dest: /etc/systemd/system/minio.service
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart minio
+
+    - name: Enable and start the MinIO service
+      ansible.builtin.systemd:
+        name: minio
+        state: started
+        enabled: true
+        daemon_reload: true
+
+    - name: Enable and start the favorite-things service
+      ansible.builtin.systemd:
+        name: favorite-things
+        state: started
+        enabled: true
+        daemon_reload: true
+
+    - name: Check for an existing TLS certificate
+      ansible.builtin.stat:
+        path: "{{ favorite_things_letsencrypt_cert }}"
+      register: favorite_things_cert
+
+    - name: Record whether TLS is already configured
+      ansible.builtin.set_fact:
+        favorite_things_has_cert: "{{ favorite_things_cert.stat.exists | bool }}"
+
+    - name: Install the nginx site
+      ansible.builtin.template:
+        src: nginx-site.conf.j2
+        dest: /etc/nginx/sites-available/favorite-things.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Enable the nginx site
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/favorite-things.conf
+        dest: /etc/nginx/sites-enabled/favorite-things.conf
+        state: link
+      notify: Reload nginx
+
+    - name: Disable the default nginx site
+      ansible.builtin.file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: Reload nginx
+
+    - name: Reload nginx before the ACME challenge
+      ansible.builtin.meta: flush_handlers
+
+    - name: Obtain the TLS certificate
+      ansible.builtin.command:
+        argv:
+          - certbot
+          - certonly
+          - --webroot
+          - --webroot-path
+          - "{{ favorite_things_letsencrypt_webroot }}"
+          - --domains
+          - "{{ favorite_things_domain }}"
+          - --non-interactive
+          - --agree-tos
+          - --no-eff-email
+          - --email
+          - "{{ favorite_things_letsencrypt_email }}"
+      when: not (favorite_things_has_cert | bool)
+      changed_when: true
+
+    - name: Update the TLS configuration flag
+      ansible.builtin.set_fact:
+        favorite_things_has_cert: true
+
+    - name: Install the final nginx site
+      ansible.builtin.template:
+        src: nginx-site.conf.j2
+        dest: /etc/nginx/sites-available/favorite-things.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Ensure the certbot deploy hook directory exists
+      ansible.builtin.file:
+        path: /etc/letsencrypt/renewal-hooks/deploy
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Reload nginx when certificates renew
+      ansible.builtin.copy:
+        dest: /etc/letsencrypt/renewal-hooks/deploy/reload-nginx
+        owner: root
+        group: root
+        mode: "0755"
+        content: |
+          #!/bin/sh
+          systemctl reload nginx
+
+    - name: Find the certbot timer unit
+      ansible.builtin.command:
+        cmd: systemctl list-unit-files --type=timer certbot.timer
+      register: favorite_things_certbot_timer
+      changed_when: false
+      failed_when: false
+
+    - name: Ensure the certbot timer is enabled
+      ansible.builtin.systemd:
+        name: certbot.timer
+        state: started
+        enabled: true
+      when: "'certbot.timer' in favorite_things_certbot_timer.stdout"
+
+    - name: Apply pending service and nginx changes
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verify the app started
+      block:
+        - name: Wait for the app to become healthy
+          ansible.builtin.uri:
+            url: "{{ favorite_things_healthcheck_url }}"
+            status_code: 200
+          register: favorite_things_health
+          retries: 30
+          delay: 2
+          until: favorite_things_health.status == 200
+          changed_when: false
+
+      rescue:
+        - name: Show the service status
+          ansible.builtin.command:
+            cmd: systemctl status favorite-things --no-pager
+          changed_when: false
+          failed_when: false
+
+        - name: Show recent application logs
+          ansible.builtin.command:
+            cmd: journalctl -u favorite-things -n 80 --no-pager
+          changed_when: false
+          failed_when: false
+
+        - name: Fail the deployment
+          ansible.builtin.fail:
+            msg: "Favorite Things did not become healthy. Check the service logs above."

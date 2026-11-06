@@ -1,0 +1,38 @@
+[Unit]
+Description=Favorite Things API
+Documentation=https://github.com/drproteus/favorite-things
+After=network-online.target postgresql.service minio.service
+Wants=network-online.target
+Requires=postgresql.service minio.service
+
+[Service]
+Type=simple
+User={{ favorite_things_user }}
+Group={{ favorite_things_group }}
+WorkingDirectory={{ favorite_things_install_dir }}
+EnvironmentFile={{ favorite_things_config_dir }}/favorite-things.env
+ExecStart={{ favorite_things_install_dir }}/favorite-things
+Restart=on-failure
+RestartSec=3
+SyslogIdentifier=favorite-things
+
+# Keep the service in its own sandbox.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,44 @@
+# Debian/Ubuntu system Python, so the apt-installed psycopg2 is visible to
+# Ansible's PostgreSQL modules.
+ansible_python_interpreter: /usr/bin/python3
+
+favorite_things_domain: favorite-things.example.com
+favorite_things_base_url: "https://{{ favorite_things_domain }}"
+favorite_things_api_url: "{{ favorite_things_base_url }}/api"
+
+favorite_things_user: favorite-things
+favorite_things_group: favorite-things
+
+favorite_things_install_dir: /opt/favorite-things
+favorite_things_config_dir: /etc/favorite-things
+favorite_things_build_dir: "{{ playbook_dir }}/.build"
+
+favorite_things_listen_host: 127.0.0.1
+favorite_things_listen_port: 8080
+favorite_things_listen_addr: "{{ favorite_things_listen_host }}:{{ favorite_things_listen_port }}"
+favorite_things_healthcheck_url: "http://{{ favorite_things_listen_host }}:{{ favorite_things_listen_port }}/api/health"
+
+favorite_things_db_name: favorite_things
+favorite_things_db_user: favorite_things
+favorite_things_db_host: 127.0.0.1
+favorite_things_db_port: 5432
+
+favorite_things_minio_data_dir: /var/lib/minio
+favorite_things_minio_host: 127.0.0.1
+favorite_things_minio_port: 9000
+favorite_things_minio_console_port: 9001
+favorite_things_minio_url: "http://{{ favorite_things_minio_host }}:{{ favorite_things_minio_port }}"
+favorite_things_minio_bucket: favorite-things-photos
+
+favorite_things_letsencrypt_webroot: /var/www/html
+favorite_things_letsencrypt_cert: "/etc/letsencrypt/live/{{ favorite_things_domain }}/fullchain.pem"
+
+# Secrets. Override these in group_vars/all/vault.yml (see vault.yml.example).
+favorite_things_db_password: ""
+favorite_things_minio_root_password: ""
+favorite_things_letsencrypt_email: ""
+favorite_things_gemini_api_key: ""
+favorite_things_github_client_id: ""
+favorite_things_github_client_secret: ""
+favorite_things_google_client_id: ""
+favorite_things_google_client_secret: ""

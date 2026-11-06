@@ -1,0 +1,10 @@
+# .gitignore for deploy/
+# Secrets and build artifacts
+group_vars/all/vault.yml
+.build/
+*.vault
+
+# Ansible runtime
+*.pyc
+__pycache__/
+.retry

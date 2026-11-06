@@ -1,0 +1,25 @@
+# Copy this file to vault.yml and fill in every value you need.
+#
+#   cp group_vars/all/vault.yml.example group_vars/all/vault.yml
+#   # edit it, then optionally encrypt it:
+#   ansible-vault encrypt group_vars/all/vault.yml
+#
+# vault.yml is git-ignored. If you encrypt it, pass --ask-vault-pass or
+# --vault-password-file when running the playbook.
+#
+# Generate passwords with:
+#   openssl rand -hex 24   # URL-safe random string
+#   openssl rand -base64 32 # base64 for keys
+
+favorite_things_db_password: ""
+favorite_things_minio_root_password: ""
+favorite_things_letsencrypt_email: ""
+
+# Photo suggestions via Google Gemini. Leave empty to disable.
+favorite_things_gemini_api_key: ""
+
+# Configure at least one OAuth provider. Leave others empty.
+favorite_things_github_client_id: ""
+favorite_things_github_client_secret: ""
+favorite_things_google_client_id: ""
+favorite_things_google_client_secret: ""
