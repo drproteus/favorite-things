@@ -25,6 +25,7 @@ type User struct {
 	Email     string `json:"email"`
 	Name      string `json:"name"`
 	AvatarURL string `json:"avatarUrl"`
+	IsAdmin   bool   `json:"isAdmin"`
 }
 
 // Service manages server-side sessions. Only a SHA-256 hash of each session token is stored.
@@ -57,11 +58,11 @@ func (s *Service) revokeSession(ctx context.Context, token string) error {
 func (s *Service) userForToken(ctx context.Context, token string) (*User, error) {
 	var u User
 	err := s.pool.QueryRow(ctx, `
-		SELECT u.id::text, COALESCE(u.email, ''), u.name, u.avatar_url
+		SELECT u.id::text, COALESCE(u.email, ''), u.name, u.avatar_url, u.is_admin
 		FROM sessions s
 		JOIN users u ON u.id = s.user_id
 		WHERE s.token_hash = $1 AND s.expires_at > now()`, hashToken(token)).
-		Scan(&u.ID, &u.Email, &u.Name, &u.AvatarURL)
+		Scan(&u.ID, &u.Email, &u.Name, &u.AvatarURL, &u.IsAdmin)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -117,6 +118,21 @@ func RequireUser(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if UserFrom(r.Context()) == nil {
 			httpx.Error(w, http.StatusUnauthorized, "sign in required")
+			return
+		}
+		next(w, r)
+	}
+}
+
+func RequireAdmin(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		u := UserFrom(r.Context())
+		if u == nil {
+			httpx.Error(w, http.StatusUnauthorized, "sign in required")
+			return
+		}
+		if !u.IsAdmin {
+			httpx.Error(w, http.StatusForbidden, "admin access required")
 			return
 		}
 		next(w, r)
