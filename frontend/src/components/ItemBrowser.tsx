@@ -121,7 +121,10 @@ export default function ItemBrowser({ scope, title, actions, collectionId, owner
               {searching ? (
                 'Try a different search.'
               ) : mine ? (
-                <Link to="/items/new" className={`${btnPrimary} mt-3`}>
+                <Link
+                  to={collectionId ? `/items/new?folder=${collectionId}` : '/items/new'}
+                  className={`${btnPrimary} mt-3`}
+                >
                   <Plus size={16} /> Add your first item
                 </Link>
               ) : (
