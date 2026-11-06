@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Globe, ImageOff, Lock, Upload, X } from 'lucide-react'
 import { api } from '../api'
 import { ErrorState, Loading } from '../components/Status'
-import { useCatalog, useItem } from '../hooks'
+import { useItem } from '../hooks'
 import { itemToInput, type Item, type ItemInput, type Visibility } from '../types'
 import { btnPrimary, btnSecondary, card, input, label } from '../ui'
 
@@ -30,10 +30,8 @@ export default function ItemFormPage() {
 function ItemForm({ existing }: { existing?: Item }) {
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const catalog = useCatalog()
-
   const [form, setForm] = useState<ItemInput>(() =>
-    existing ? itemToInput(existing) : { title: '', description: '', categoryId: 0, visibility: 'private' },
+    existing ? itemToInput(existing) : { title: '', description: '', visibility: 'private' },
   )
   const [itemId, setItemId] = useState<string | undefined>(existing?.id)
   const [pending, setPending] = useState<PendingFile[]>([])
@@ -145,32 +143,9 @@ function ItemForm({ existing }: { existing?: Item }) {
           />
         </div>
 
-        <div className="grid gap-6 sm:grid-cols-2">
-          <div>
-            <label htmlFor="category" className={label}>
-              Category
-            </label>
-            <select
-              id="category"
-              className={input}
-              required
-              value={form.categoryId || ''}
-              onChange={(e) => update('categoryId', Number(e.target.value))}
-            >
-              <option value="" disabled>
-                Choose a category
-              </option>
-              {catalog.data?.categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <span className={label}>Visibility</span>
-            <VisibilityToggle value={form.visibility} onChange={(v) => update('visibility', v)} />
-          </div>
+        <div>
+          <span className={label}>Visibility</span>
+          <VisibilityToggle value={form.visibility} onChange={(v) => update('visibility', v)} />
         </div>
 
         <div>
@@ -280,11 +255,7 @@ function ItemForm({ existing }: { existing?: Item }) {
           <button type="button" onClick={() => navigate(-1)} className={btnSecondary}>
             Cancel
           </button>
-          <button
-            type="submit"
-            disabled={save.isPending || form.title.trim() === '' || form.categoryId === 0}
-            className={btnPrimary}
-          >
+          <button type="submit" disabled={save.isPending || form.title.trim() === ''} className={btnPrimary}>
             {save.isPending ? 'Saving…' : existing ? 'Save changes' : 'Create item'}
           </button>
         </div>

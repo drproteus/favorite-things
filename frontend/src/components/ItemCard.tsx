@@ -34,10 +34,6 @@ export default function ItemCard({ item }: { item: Item }) {
           </span>
         </div>
 
-        {item.category && (
-          <p className="text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400">{item.category}</p>
-        )}
-
         <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
           {item.rating !== null && <StarRating value={item.rating} size={14} />}
           {item.tags.slice(0, 3).map((t) => (

@@ -41,21 +41,6 @@ export function useItem(id: string, enabled = true) {
   })
 }
 
-export function useExplore() {
-  return useQuery({
-    queryKey: ['explore'],
-    queryFn: api.explore,
-  })
-}
-
-export function useCatalog() {
-  return useQuery({
-    queryKey: ['catalog'],
-    queryFn: api.catalog,
-    staleTime: 5 * 60_000,
-  })
-}
-
 export function useTags(enabled = true) {
   return useQuery({
     queryKey: ['tags'],

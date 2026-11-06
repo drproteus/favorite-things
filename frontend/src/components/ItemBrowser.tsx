@@ -1,7 +1,7 @@
 import { useDeferredValue, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Compass, Plus, Search } from 'lucide-react'
-import { useCatalog, useItems, useTags } from '../hooks'
+import { useItems, useTags } from '../hooks'
 import type { ItemFilter, Visibility } from '../types'
 import { btnPrimary, input } from '../ui'
 import ItemCard from './ItemCard'
@@ -18,7 +18,6 @@ export default function ItemBrowser({ scope, title, subtitle, actions }: Props) 
   const mine = scope === 'mine'
   const [q, setQ] = useState('')
   const [tag, setTag] = useState('')
-  const [categoryId, setCategoryId] = useState(0)
   const [visibility, setVisibility] = useState<Visibility | ''>('')
   const deferredQ = useDeferredValue(q)
 
@@ -26,12 +25,10 @@ export default function ItemBrowser({ scope, title, subtitle, actions }: Props) 
     scope,
     q: deferredQ,
     tag,
-    categoryId,
     visibility: mine ? visibility : '',
   }
   const items = useItems(filter)
   const tags = useTags(mine)
-  const catalog = useCatalog()
 
   return (
     <div className="space-y-6">
@@ -43,7 +40,7 @@ export default function ItemBrowser({ scope, title, subtitle, actions }: Props) 
         {actions}
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_12rem_12rem_12rem]">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_12rem_12rem]">
         <div className="relative">
           <Search size={16} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-stone-400" />
           <input
@@ -53,21 +50,6 @@ export default function ItemBrowser({ scope, title, subtitle, actions }: Props) 
             onChange={(e) => setQ(e.target.value)}
             aria-label="Search"
           />
-        </div>
-        <div>
-          <select
-            className={input}
-            value={categoryId}
-            onChange={(e) => setCategoryId(Number(e.target.value))}
-            aria-label="Filter by category"
-          >
-            <option value={0}>All categories</option>
-            {catalog.data?.categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
         </div>
         {mine && (
           <>

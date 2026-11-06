@@ -18,7 +18,7 @@ const errorMessages: Record<string, string> = {
 }
 
 const features = [
-  { icon: Tags, text: 'Tag and categorize everything you collect' },
+  { icon: Tags, text: 'Tag everything you collect with #hashtags' },
   { icon: Star, text: 'Rate items and keep notes on what you love' },
   { icon: Globe, text: 'Toggle items between public and private' },
   { icon: Share2, text: 'Share a public link with anyone' },

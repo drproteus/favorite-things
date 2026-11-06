@@ -18,7 +18,6 @@ export default function Layout() {
   const links = [
     ...(me ? [{ to: '/collection', label: 'My collection' }] : []),
     { to: '/explore', label: 'Explore' },
-    ...(me?.isAdmin ? [{ to: '/admin', label: 'Admin' }] : []),
   ]
 
   const signOut = () => {

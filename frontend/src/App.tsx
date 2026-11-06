@@ -4,7 +4,6 @@ import { Sparkles } from 'lucide-react'
 import Layout from './components/Layout'
 import { EmptyState, Loading } from './components/Status'
 import { useMe } from './hooks'
-import AdminPage from './pages/AdminPage'
 import CollectionPage from './pages/CollectionPage'
 import ExplorePage from './pages/ExplorePage'
 import ItemDetailPage from './pages/ItemDetailPage'
@@ -12,11 +11,10 @@ import ItemFormPage from './pages/ItemFormPage'
 import LoginPage from './pages/LoginPage'
 import { btnPrimary } from './ui'
 
-function RequireAuth({ children, admin = false }: { children: ReactNode; admin?: boolean }) {
+function RequireAuth({ children }: { children: ReactNode }) {
   const { data: me, isPending } = useMe()
   if (isPending) return <Loading />
   if (!me) return <Navigate to="/login" replace />
-  if (admin && !me.isAdmin) return <Navigate to="/collection" replace />
   return children
 }
 
@@ -49,14 +47,6 @@ export default function App() {
           element={
             <RequireAuth>
               <ItemFormPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="admin"
-          element={
-            <RequireAuth admin>
-              <AdminPage />
             </RequireAuth>
           }
         />

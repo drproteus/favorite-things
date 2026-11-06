@@ -125,7 +125,6 @@ function ItemView({ item }: { item: Item }) {
                 {isPublic ? <Globe size={12} /> : <Lock size={12} />}
                 {isPublic ? 'Public' : 'Private'}
               </span>
-              {item.category && <span className={chip}>{item.category}</span>}
             </div>
             <h1 className="text-3xl font-bold tracking-tight">{item.title}</h1>
             <p className="text-sm text-stone-500 dark:text-stone-400">

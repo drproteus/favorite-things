@@ -1,4 +1,4 @@
-import type { Catalog, ExploreSection, Item, ItemFilter, ItemImage, ItemInput, Term, TermKind, User } from './types'
+import type { Item, ItemFilter, ItemImage, ItemInput, User } from './types'
 
 export class ApiError extends Error {
   status: number
@@ -44,7 +44,6 @@ export const api = {
     const params = new URLSearchParams({ scope: f.scope })
     if (f.q) params.set('q', f.q)
     if (f.tag) params.set('tag', f.tag)
-    if (f.categoryId) params.set('category', String(f.categoryId))
     if (f.visibility) params.set('visibility', f.visibility)
     return request<Item[]>(`/items?${params}`)
   },
@@ -67,15 +66,4 @@ export const api = {
   clearRating: (itemId: string) => request<void>(`/items/${itemId}/rating`, { method: 'DELETE' }),
 
   tags: () => request<string[]>('/tags'),
-
-  explore: () => request<ExploreSection[]>('/explore'),
-
-  catalog: () => request<Catalog>('/catalog'),
-  createTerm: (kind: TermKind, name: string) =>
-    request<Term>(`/admin/${kind}`, { method: 'POST', json: { name } }),
-  renameTerm: (kind: TermKind, id: number, name: string) =>
-    request<Term>(`/admin/${kind}/${id}`, { method: 'PUT', json: { name } }),
-  deleteTerm: (kind: TermKind, id: number) => request<void>(`/admin/${kind}/${id}`, { method: 'DELETE' }),
-  reorderTerms: (kind: TermKind, ids: number[]) =>
-    request<void>(`/admin/${kind}/order`, { method: 'PUT', json: { ids } }),
 }
