@@ -53,6 +53,24 @@ func TestGeminiSendsImageAndKey(t *testing.T) {
 	}
 }
 
+func TestGeminiRejectsTruncatedReply(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if !strings.Contains(string(body), `"responseMimeType":"application/json"`) {
+			t.Errorf("request should ask for JSON output")
+		}
+		w.Write([]byte(`{"candidates":[{"content":{"parts":[{"text":"{\"title\": \"Game"}]},"finishReason":"MAX_TOKENS"}]}`))
+	}))
+	defer srv.Close()
+
+	g := NewGemini("key", "test-model")
+	g.baseURL = srv.URL
+	_, err := g.Describe(context.Background(), []byte("x"), "png")
+	if err == nil || !strings.Contains(err.Error(), "MAX_TOKENS") {
+		t.Fatalf("error = %v, want a MAX_TOKENS error", err)
+	}
+}
+
 func TestGeminiReportsErrors(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)

@@ -48,8 +48,9 @@ type geminiRequest struct {
 		Parts []geminiPart `json:"parts"`
 	} `json:"contents"`
 	GenerationConfig struct {
-		Temperature     float64 `json:"temperature"`
-		MaxOutputTokens int     `json:"maxOutputTokens"`
+		Temperature      float64 `json:"temperature"`
+		MaxOutputTokens  int     `json:"maxOutputTokens"`
+		ResponseMIMEType string  `json:"responseMimeType"`
 	} `json:"generationConfig"`
 }
 
@@ -60,6 +61,7 @@ type geminiResponse struct {
 				Text string `json:"text"`
 			} `json:"parts"`
 		} `json:"content"`
+		FinishReason string `json:"finishReason"`
 	} `json:"candidates"`
 	Error *struct {
 		Message string `json:"message"`
@@ -76,7 +78,9 @@ func (g *Gemini) Describe(ctx context.Context, image []byte, format string) (str
 		{Text: prompt},
 	}}}
 	req.GenerationConfig.Temperature = 0.2
-	req.GenerationConfig.MaxOutputTokens = 400
+	// Gemini 3 models spend part of this budget on internal reasoning, so leave room for the JSON.
+	req.GenerationConfig.MaxOutputTokens = 2048
+	req.GenerationConfig.ResponseMIMEType = "application/json"
 
 	body, err := json.Marshal(req)
 	if err != nil {
@@ -113,6 +117,9 @@ func (g *Gemini) Describe(ctx context.Context, image []byte, format string) (str
 	}
 	if len(out.Candidates) == 0 {
 		return "", errors.New("gemini returned no candidates")
+	}
+	if reason := out.Candidates[0].FinishReason; reason != "" && reason != "STOP" {
+		return "", fmt.Errorf("gemini stopped before finishing: %s", reason)
 	}
 	var text strings.Builder
 	for _, p := range out.Candidates[0].Content.Parts {
