@@ -12,9 +12,11 @@ interface Props {
   title: string
   subtitle: string
   actions?: ReactNode
+  collectionId?: string
+  before?: ReactNode
 }
 
-export default function ItemBrowser({ scope, title, subtitle, actions }: Props) {
+export default function ItemBrowser({ scope, title, subtitle, actions, collectionId, before }: Props) {
   const mine = scope === 'mine'
   const [q, setQ] = useState('')
   const [tag, setTag] = useState('')
@@ -25,6 +27,7 @@ export default function ItemBrowser({ scope, title, subtitle, actions }: Props) 
     scope,
     q: deferredQ,
     tag,
+    collectionId: mine ? collectionId : undefined,
     visibility: mine ? visibility : '',
   }
   const items = useItems(filter)
@@ -39,6 +42,8 @@ export default function ItemBrowser({ scope, title, subtitle, actions }: Props) 
         </div>
         {actions}
       </div>
+
+      {before}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_12rem_12rem]">
         <div className="relative">

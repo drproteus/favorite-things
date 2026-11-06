@@ -41,6 +41,14 @@ export function useItem(id: string, enabled = true) {
   })
 }
 
+export function useCollections(enabled = true) {
+  return useQuery({
+    queryKey: ['collections'],
+    queryFn: api.collections,
+    enabled,
+  })
+}
+
 export function useTags(enabled = true) {
   return useQuery({
     queryKey: ['tags'],

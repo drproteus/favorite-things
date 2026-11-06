@@ -1,11 +1,12 @@
 import { useState, type ChangeEvent, type DragEvent, type FormEvent } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Globe, ImageOff, Lock, Upload, X } from 'lucide-react'
 import { api } from '../api'
 import { ErrorState, Loading } from '../components/Status'
-import { useItem } from '../hooks'
-import { itemToInput, type Item, type ItemInput, type Visibility } from '../types'
+import { flattenFolders, rootFolder } from '../folders'
+import { useCollections, useItem } from '../hooks'
+import { itemToInput, type Collection, type Item, type ItemInput, type Visibility } from '../types'
 import { btnPrimary, btnSecondary, card, input, label } from '../ui'
 
 const MAX_IMAGES = 20
@@ -19,19 +20,29 @@ interface PendingFile {
 
 export default function ItemFormPage() {
   const { id } = useParams()
+  const [params] = useSearchParams()
   const editing = id !== undefined
   const existing = useItem(id ?? '', editing)
+  const folders = useCollections()
 
   if (editing && existing.isPending) return <Loading />
   if (editing && existing.error) return <ErrorState message={existing.error.message} />
-  return <ItemForm key={id ?? 'new'} existing={existing.data} />
+  if (folders.isPending) return <Loading />
+  if (folders.error) return <ErrorState message={folders.error.message} />
+
+  const list = folders.data
+  const requested = params.get('folder')
+  const defaultFolder = list.find((c) => c.id === requested)?.id ?? rootFolder(list)?.id ?? ''
+  return <ItemForm key={id ?? 'new'} existing={existing.data} folders={list} defaultFolder={defaultFolder} />
 }
 
-function ItemForm({ existing }: { existing?: Item }) {
+function ItemForm({ existing, folders, defaultFolder }: { existing?: Item; folders: Collection[]; defaultFolder: string }) {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const [form, setForm] = useState<ItemInput>(() =>
-    existing ? itemToInput(existing) : { title: '', description: '', visibility: 'private' },
+    existing
+      ? itemToInput(existing)
+      : { title: '', description: '', collectionId: defaultFolder, visibility: 'private' },
   )
   const [itemId, setItemId] = useState<string | undefined>(existing?.id)
   const [pending, setPending] = useState<PendingFile[]>([])
@@ -143,9 +154,29 @@ function ItemForm({ existing }: { existing?: Item }) {
           />
         </div>
 
-        <div>
-          <span className={label}>Visibility</span>
-          <VisibilityToggle value={form.visibility} onChange={(v) => update('visibility', v)} />
+        <div className="grid gap-6 sm:grid-cols-2">
+          <div>
+            <label htmlFor="folder" className={label}>
+              Folder
+            </label>
+            <select
+              id="folder"
+              className={input}
+              value={form.collectionId}
+              onChange={(e) => update('collectionId', e.target.value)}
+            >
+              {flattenFolders(folders).map(({ folder, depth }) => (
+                <option key={folder.id} value={folder.id}>
+                  {'\u2003'.repeat(depth)}
+                  {folder.parentId === null ? 'My collection' : folder.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <span className={label}>Visibility</span>
+            <VisibilityToggle value={form.visibility} onChange={(v) => update('visibility', v)} />
+          </div>
         </div>
 
         <div>

@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Check, Globe, ImageOff, Lock, Pencil, Share2, Trash2 } from 'lucide-react'
+import { ArrowLeft, Check, Folder, Globe, ImageOff, Lock, Pencil, Share2, Trash2 } from 'lucide-react'
 import { api } from '../api'
 import StarRating from '../components/StarRating'
 import { ErrorState, Loading } from '../components/Status'
-import { useItem, useMe } from '../hooks'
+import { pathTo } from '../folders'
+import { useCollections, useItem, useMe } from '../hooks'
 import { itemToInput, type Item, type Visibility } from '../types'
 import { btnDanger, btnGhost, btnPrimary, btnSecondary, card, chip } from '../ui'
 
@@ -28,6 +29,8 @@ function ItemView({ item }: { item: Item }) {
   const isOwner = me?.id === item.ownerId
   const isPublic = item.visibility === 'public'
   const current = item.images[active]
+  const folders = useCollections(isOwner)
+  const folderPath = folders.data ? pathTo(folders.data, item.collectionId) : []
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['items'] })
@@ -125,6 +128,12 @@ function ItemView({ item }: { item: Item }) {
                 {isPublic ? <Globe size={12} /> : <Lock size={12} />}
                 {isPublic ? 'Public' : 'Private'}
               </span>
+              {isOwner && folderPath.length > 0 && (
+                <Link to={`/collection?folder=${item.collectionId}`} className={`${chip} inline-flex items-center gap-1`}>
+                  <Folder size={12} />
+                  {folderPath.map((f) => (f.parentId === null ? 'My collection' : f.name)).join(' / ')}
+                </Link>
+              )}
             </div>
             <h1 className="text-3xl font-bold tracking-tight">{item.title}</h1>
             <p className="text-sm text-stone-500 dark:text-stone-400">

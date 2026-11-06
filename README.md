@@ -9,6 +9,9 @@ A personal inventory and collection app. Catalog anything you collect (consoles,
 
 - Sign in with Google or GitHub (no passwords)
 - Create, edit and delete items with a title, description, #hashtag tags and photos (0 to 20 per item)
+- Folders: every user has a root folder, and folders nest under it to any depth. Each item sits in one folder. Folders can be moved, renamed and set public or private
+- A private folder hides everything inside it, even items marked public
+- Deleting a folder asks whether to delete its contents or move them up one level. Deleting everything is the default
 - Public or private visibility, toggled from the item page or the edit form
 - Explore page for public items, with search and tag filters
 - Drag-and-drop or browse to add photos
@@ -26,6 +29,7 @@ backend/            Go API
     auth/           OAuth login, server-side sessions, middleware
     config/         environment configuration
     database/       pgx pool and embedded SQL migrations
+    collections/    folder tree: store and HTTP handlers
     items/          items, hashtags, images, ratings: store and HTTP handlers
     server/         router and SPA fallback
     storage/        S3/MinIO client and presigned URLs
@@ -71,6 +75,8 @@ Prerequisites: Go 1.26+, Node 24+, Docker.
    ```
 
    Open http://localhost:5173.
+
+> **Schema note:** all migrations are consolidated into `backend/internal/database/migrations/001_init.sql`. A database created before this change has the old migration records and must be reset: `DROP SCHEMA public CASCADE; CREATE SCHEMA public;`. Then the API applies the new schema on start.
 
 ## Admin access
 
@@ -120,7 +126,7 @@ This starts Postgres, MinIO and the app at http://localhost:8080. Put your OAuth
 | GET | `/api/auth/{provider}/callback` | | OAuth callback (sets session cookie) |
 | POST | `/api/auth/logout` | | End session |
 | GET | `/api/me` | yes | Current user |
-| GET | `/api/items?scope=mine\|public&q&tag&visibility&limit&offset` | scope=mine: yes | List items |
+| GET | `/api/items?scope=mine\|public&q&tag&collection&visibility&limit&offset` | scope=mine: yes | List items (`collection` limits mine to one folder) |
 | POST | `/api/items` | yes | Create item |
 | GET | `/api/items/{id}` | public or owner | Get item |
 | PUT | `/api/items/{id}` | owner | Update item (including visibility) |
@@ -129,6 +135,10 @@ This starts Postgres, MinIO and the app at http://localhost:8080. Put your OAuth
 | DELETE | `/api/items/{id}/images/{imageId}` | owner | Remove photo |
 | PUT | `/api/items/{id}/rating` | owner | Set the rating `{ "rating": 1-5 }` |
 | DELETE | `/api/items/{id}/rating` | owner | Clear the rating |
+| GET | `/api/collections` | yes | Your folders, including the root (the one with no `parentId`) |
+| POST | `/api/collections` | yes | Create `{ "name", "visibility", "parentId" }` (parent defaults to root) |
+| PUT | `/api/collections/{id}` | owner | Update `{ "name", "visibility", "parentId" }`; moves the folder. The root can't be changed |
+| DELETE | `/api/collections/{id}?contents=delete\|move` | owner | Delete a folder. `delete` (default) removes everything inside it; `move` moves the contents up to the parent |
 | GET | `/api/tags` | yes | Hashtags used on your items (for the filter) |
 
 ## Tests and checks

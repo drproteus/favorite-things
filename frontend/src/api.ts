@@ -1,4 +1,4 @@
-import type { Item, ItemFilter, ItemImage, ItemInput, User } from './types'
+import type { Collection, CollectionInput, DeleteContents, Item, ItemFilter, ItemImage, ItemInput, User } from './types'
 
 export class ApiError extends Error {
   status: number
@@ -44,6 +44,7 @@ export const api = {
     const params = new URLSearchParams({ scope: f.scope })
     if (f.q) params.set('q', f.q)
     if (f.tag) params.set('tag', f.tag)
+    if (f.collectionId) params.set('collection', f.collectionId)
     if (f.visibility) params.set('visibility', f.visibility)
     return request<Item[]>(`/items?${params}`)
   },
@@ -66,4 +67,12 @@ export const api = {
   clearRating: (itemId: string) => request<void>(`/items/${itemId}/rating`, { method: 'DELETE' }),
 
   tags: () => request<string[]>('/tags'),
+
+  collections: () => request<Collection[]>('/collections'),
+  createCollection: (input: CollectionInput) =>
+    request<Collection>('/collections', { method: 'POST', json: input }),
+  updateCollection: (id: string, input: CollectionInput) =>
+    request<Collection>(`/collections/${id}`, { method: 'PUT', json: input }),
+  deleteCollection: (id: string, contents: DeleteContents) =>
+    request<void>(`/collections/${id}?contents=${contents}`, { method: 'DELETE' }),
 }
