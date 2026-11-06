@@ -96,7 +96,8 @@ func (s *Store) List(ctx context.Context, f Filter) ([]Item, error) {
 	if f.Query != "" {
 		args = append(args, "%"+likeEscaper.Replace(f.Query)+"%")
 		n := len(args)
-		conds = append(conds, fmt.Sprintf("(i.title ILIKE $%d OR i.description ILIKE $%d)", n, n))
+		conds = append(conds, fmt.Sprintf(
+			"(i.title ILIKE $%d OR i.description ILIKE $%d OR EXISTS (SELECT 1 FROM unnest(i.tags) AS t WHERE t ILIKE $%d))", n, n, n))
 	}
 	if f.Tag != "" {
 		add("$%d = ANY(i.tags)", normalizeTag(f.Tag))

@@ -89,6 +89,8 @@ export interface ItemFilter {
   q?: string
   tag?: string
   collectionId?: string
+  // Public listings only: one user's public items.
+  owner?: string
   visibility?: Visibility | ''
 }
 

@@ -58,14 +58,6 @@ export function usePublicCollections(id: string) {
   })
 }
 
-export function useUserItems(id: string, folderId: string) {
-  return useQuery({
-    queryKey: ['user-items', id, folderId],
-    queryFn: () => api.userItems(id, folderId),
-    enabled: id !== '' && folderId !== '',
-  })
-}
-
 export function useCollections(enabled = true) {
   return useQuery({
     queryKey: ['collections'],
@@ -82,10 +74,3 @@ export function usePopularTags() {
   })
 }
 
-export function useTags(enabled = true) {
-  return useQuery({
-    queryKey: ['tags'],
-    queryFn: api.tags,
-    enabled,
-  })
-}

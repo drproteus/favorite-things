@@ -1,11 +1,11 @@
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ChevronRight, Compass, Folder, Settings } from 'lucide-react'
 import FolderHeader from '../components/FolderHeader'
-import ItemCard from '../components/ItemCard'
+import ItemBrowser from '../components/ItemBrowser'
 import Markdown from '../components/Markdown'
 import { EmptyState, ErrorState, Loading } from '../components/Status'
 import { childrenOf, pathTo, rootFolder } from '../folders'
-import { useMe, usePublicCollections, usePublicUser, useUserItems } from '../hooks'
+import { useMe, usePublicCollections, usePublicUser } from '../hooks'
 import type { Collection, PublicUser } from '../types'
 import { btnSecondary, card } from '../ui'
 
@@ -66,7 +66,7 @@ function Header({ user, isMe }: { user: PublicUser; isMe: boolean }) {
   )
 }
 
-// The public part of the owner's folder tree, browsed the same way as the owner's own collection view.
+// The public part of the owner's folder tree, browsed with the same toolbar as the owner's own collection.
 function FolderView({
   userId,
   folders,
@@ -86,72 +86,47 @@ function FolderView({
   const nameOf = (f: Collection) => (f.parentId === null ? `${ownerName}'s collection` : f.name)
 
   return (
-    <section className="space-y-5">
-      <nav aria-label="Folder path" className="flex flex-wrap items-center gap-1 text-sm text-stone-500 dark:text-stone-400">
-        {path.map((f, i) => (
-          <span key={f.id} className="flex items-center gap-1">
-            {i > 0 && <ChevronRight size={14} />}
-            {i === path.length - 1 ? (
-              <span className="font-medium text-stone-800 dark:text-stone-200">{nameOf(f)}</span>
-            ) : (
-              <button type="button" onClick={() => go(f.id)} className="cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400">
-                {nameOf(f)}
-              </button>
-            )}
-          </span>
-        ))}
-      </nav>
-
-      {current.parentId !== null && <FolderHeader folder={current} />}
-
-      {subfolders.length > 0 && (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {subfolders.map((f) => (
-            <button
-              key={f.id}
-              type="button"
-              onClick={() => go(f.id)}
-              className={`${card} flex cursor-pointer items-center gap-3 p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md`}
-            >
-              <Folder size={20} className="shrink-0 text-indigo-500" />
-              <span className="block truncate font-medium">{f.name}</span>
-            </button>
-          ))}
+    <ItemBrowser
+      scope="public"
+      owner={userId}
+      title={nameOf(current)}
+      collectionId={current.id}
+      before={
+        <div className="space-y-4">
+          <nav aria-label="Folder path" className="flex flex-wrap items-center gap-1 text-sm text-stone-500 dark:text-stone-400">
+            {path.map((f, i) => (
+              <span key={f.id} className="flex items-center gap-1">
+                {i > 0 && <ChevronRight size={14} />}
+                {i === path.length - 1 ? (
+                  <span className="font-medium text-stone-800 dark:text-stone-200">{nameOf(f)}</span>
+                ) : (
+                  <button type="button" onClick={() => go(f.id)} className="cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400">
+                    {nameOf(f)}
+                  </button>
+                )}
+              </span>
+            ))}
+          </nav>
+          {current.parentId !== null && <FolderHeader folder={current} />}
         </div>
-      )}
-
-      <FolderItems userId={userId} folderId={current.id} isRoot={current.id === root.id} hasFolders={subfolders.length > 0} />
-    </section>
-  )
-}
-
-function FolderItems({
-  userId,
-  folderId,
-  isRoot,
-  hasFolders,
-}: {
-  userId: string
-  folderId: string
-  isRoot: boolean
-  hasFolders: boolean
-}) {
-  const items = useUserItems(userId, folderId)
-  if (items.isPending) return <Loading />
-  if (items.isError) return <ErrorState message={items.error.message} />
-  if (items.data.length === 0) {
-    if (hasFolders) return null
-    return (
-      <EmptyState icon={<Compass size={40} />} title={isRoot ? 'Nothing public yet' : 'Nothing public here'}>
-        Items shared as public show up here.
-      </EmptyState>
-    )
-  }
-  return (
-    <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      {items.data.map((item) => (
-        <ItemCard key={item.id} item={item} />
-      ))}
-    </div>
+      }
+      folders={() =>
+        subfolders.length > 0 && (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {subfolders.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => go(f.id)}
+                className={`${card} flex cursor-pointer items-center gap-3 p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md`}
+              >
+                <Folder size={20} className="shrink-0 text-indigo-500" />
+                <span className="block truncate font-medium">{f.name}</span>
+              </button>
+            ))}
+          </div>
+        )
+      }
+    />
   )
 }

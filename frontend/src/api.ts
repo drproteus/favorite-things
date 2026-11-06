@@ -55,14 +55,13 @@ export const api = {
   updateMe: (input: UserSettingsInput) => request<User>('/me', { method: 'PUT', json: input }),
   publicUser: (id: string) => request<PublicUser>(`/users/${id}`),
   publicCollections: (id: string) => request<Collection[]>(`/users/${id}/collections`),
-  userItems: (id: string, folderId?: string) =>
-    request<Item[]>(`/users/${id}/items${folderId ? `?collection=${folderId}` : ''}`),
   logout: () => request<void>('/auth/logout', { method: 'POST' }),
 
   listItems: (f: ItemFilter) => {
     const params = new URLSearchParams({ scope: f.scope })
     if (f.q) params.set('q', f.q)
     if (f.tag) params.set('tag', f.tag)
+    if (f.owner) params.set('owner', f.owner)
     if (f.collectionId) params.set('collection', f.collectionId)
     if (f.visibility) params.set('visibility', f.visibility)
     return request<Item[]>(`/items?${params}`)
@@ -90,7 +89,6 @@ export const api = {
     request<Item>(`/items/${itemId}/rating`, { method: 'PUT', json: { rating } }),
   clearRating: (itemId: string) => request<void>(`/items/${itemId}/rating`, { method: 'DELETE' }),
 
-  tags: () => request<string[]>('/tags'),
   popularTags: (limit = 12) => request<PopularTag[]>(`/tags/popular?limit=${limit}`),
 
   collections: () => request<Collection[]>('/collections'),

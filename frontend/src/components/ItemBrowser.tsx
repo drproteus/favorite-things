@@ -1,11 +1,12 @@
 import { useDeferredValue, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Compass, Plus, Search } from 'lucide-react'
-import { useItems, useTags } from '../hooks'
+import { useItems } from '../hooks'
 import type { ItemFilter, Visibility } from '../types'
 import { btnGhost, btnPrimary, chip, input } from '../ui'
 import ItemCard from './ItemCard'
 import { EmptyState, ErrorState, Loading } from './Status'
+import Segmented from './Segmented'
 
 export interface Selection {
   active: boolean
@@ -13,122 +14,113 @@ export interface Selection {
   onToggle: (id: string) => void
 }
 
+type SearchScope = 'folder' | 'all'
+
 interface Props {
   scope: ItemFilter['scope']
   title: string
-  subtitle: string
   actions?: ReactNode
+  // Set when the list is a folder: enables the "This folder / All folders" search scope.
   collectionId?: string
+  // One user's public items, for their profile.
+  owner?: string
   // Shown between the header and the search toolbar, e.g. a breadcrumb.
   before?: ReactNode
-  // Shown below the search toolbar, e.g. subfolders.
-  folders?: ReactNode
+  // Subfolders, shown while not searching. Receives the visibility filter so folders can follow it.
+  folders?: (visibility: Visibility | '') => ReactNode
   selection?: Selection
 }
 
-export default function ItemBrowser({
-  scope,
-  title,
-  subtitle,
-  actions,
-  collectionId,
-  before,
-  folders,
-  selection,
-}: Props) {
+export default function ItemBrowser({ scope, title, actions, collectionId, owner, before, folders, selection }: Props) {
   const mine = scope === 'mine'
   const [q, setQ] = useState('')
-  const [params, setParams] = useSearchParams()
-  const [mineTag, setMineTag] = useState('')
-  // On Explore the tag lives in the URL, so a tag link can open the page already filtered.
-  const tag = mine ? mineTag : (params.get('tag') ?? '')
-  const setTag = (value: string) => {
-    if (mine) setMineTag(value)
-    else setParams(value ? { tag: value } : {})
-  }
+  const [searchScope, setSearchScope] = useState<SearchScope>('folder')
   const [visibility, setVisibility] = useState<Visibility | ''>('')
+  const [params, setParams] = useSearchParams()
+  // On Explore the tag lives in the URL, so a tag link can open the page already filtered.
+  const tag = mine ? '' : (params.get('tag') ?? '')
   const deferredQ = useDeferredValue(q)
+  const searching = deferredQ.trim() !== ''
+  const inFolder = collectionId !== undefined && !(searching && searchScope === 'all')
 
   const filter: ItemFilter = {
     scope,
-    q: deferredQ,
+    q: deferredQ.trim(),
     tag,
-    collectionId: mine ? collectionId : undefined,
+    owner,
+    collectionId: inFolder ? collectionId : undefined,
     visibility: mine ? visibility : '',
   }
   const items = useItems(filter)
-  const tags = useTags(mine)
+
+  const folderNodes = !searching && folders ? folders(mine ? visibility : '') : null
+  const folderScoped = collectionId !== undefined
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{title}</h1>
-          <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">{subtitle}</p>
-        </div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{title}</h1>
         {actions}
       </div>
 
       {before}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_12rem_12rem]">
-        <div className="relative">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+        <div className="relative min-w-0 flex-1">
           <Search size={16} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-stone-400" />
           <input
             className={`${input} pl-9`}
-            placeholder="Search titles and descriptions"
+            placeholder={inFolder ? 'Search this folder: titles, descriptions, tags' : 'Search everything: titles, descriptions, tags'}
             value={q}
             onChange={(e) => setQ(e.target.value)}
             aria-label="Search"
           />
         </div>
+        {folderScoped && (
+          <Segmented<SearchScope>
+            label="Search scope"
+            value={searchScope}
+            onChange={setSearchScope}
+            options={[
+              { value: 'folder', text: 'This folder' },
+              { value: 'all', text: 'All folders' },
+            ]}
+          />
+        )}
         {mine && (
-          <>
-            <select
-              className={input}
-              value={tag}
-              onChange={(e) => setTag(e.target.value)}
-              aria-label="Filter by tag"
-            >
-              <option value="">All tags</option>
-              {tags.data?.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-            <select
-              className={input}
-              value={visibility}
-              onChange={(e) => setVisibility(e.target.value as Visibility | '')}
-              aria-label="Filter by visibility"
-            >
-              <option value="">Any visibility</option>
-              <option value="public">Public</option>
-              <option value="private">Private</option>
-            </select>
-          </>
+          <Segmented<Visibility | ''>
+            label="Visibility"
+            value={visibility}
+            onChange={setVisibility}
+            options={[
+              { value: '', text: 'All' },
+              { value: 'public', text: 'Public' },
+              { value: 'private', text: 'Private' },
+            ]}
+          />
         )}
       </div>
 
       {!mine && tag && (
         <div className="flex items-center gap-2 text-sm text-stone-600 dark:text-stone-300">
           Showing <span className={chip}>#{tag}</span>
-          <button type="button" onClick={() => setTag('')} className={btnGhost}>
+          <button type="button" onClick={() => setParams({})} className={btnGhost}>
             Clear
           </button>
         </div>
       )}
 
-      {folders}
+      {folderNodes}
 
       {items.isPending && <Loading />}
       {items.isError && <ErrorState message={items.error.message} />}
       {items.data &&
         (items.data.length === 0 ? (
-          !folders && (
-            <EmptyState icon={<Compass size={40} />} title={mine ? 'Nothing here yet' : 'No items found'}>
-              {mine ? (
+          !folderNodes && (
+            <EmptyState icon={<Compass size={40} />} title={mine && !searching ? 'Nothing here yet' : 'No items found'}>
+              {searching ? (
+                'Try a different search.'
+              ) : mine ? (
                 <Link to="/items/new" className={`${btnPrimary} mt-3`}>
                   <Plus size={16} /> Add your first item
                 </Link>

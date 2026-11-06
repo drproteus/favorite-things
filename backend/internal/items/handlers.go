@@ -192,7 +192,22 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 			f.CollectionID = folder
 		}
 	} else {
+		// Public listings: Explore, or one user's public items with ?owner= (and optionally a ?collection=).
 		f.Visibility = ""
+		if raw := q.Get("owner"); raw != "" {
+			owner, ok := parseID(w, raw)
+			if !ok {
+				return
+			}
+			f.PublicOwnerID = owner
+		}
+		if raw := q.Get("collection"); raw != "" {
+			folder, ok := parseID(w, raw)
+			if !ok {
+				return
+			}
+			f.CollectionID = folder
+		}
 	}
 
 	list, err := h.store.List(r.Context(), f)

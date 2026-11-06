@@ -10,7 +10,7 @@ import { SelectMark } from '../components/ItemCard'
 import { ErrorState, Loading } from '../components/Status'
 import { childrenOf, pathTo, rootFolder } from '../folders'
 import { useCollections } from '../hooks'
-import type { Collection } from '../types'
+import type { Collection, Visibility } from '../types'
 import { btnGhost, btnPrimary, btnSecondary, card } from '../ui'
 
 type Dialog = 'new' | 'edit' | 'delete' | 'bulk-move' | 'bulk-visibility' | 'bulk-delete' | null
@@ -104,9 +104,11 @@ export default function CollectionPage() {
     </nav>
   )
 
-  const folderGrid = subfolders.length > 0 && (
+  const folderGrid = (visibility: Visibility | '') => {
+    const shown = subfolders.filter((f) => !visibility || f.visibility === visibility)
+    return shown.length > 0 && (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      {subfolders.map((f) => {
+      {shown.map((f) => {
         const isPicked = picked.folderIds.includes(f.id)
         const content = (
           <>
@@ -127,9 +129,8 @@ export default function CollectionPage() {
               type="button"
               aria-pressed={isPicked}
               onClick={() => setPicked((p) => ({ ...p, folderIds: toggled(p.folderIds, f.id) }))}
-              className={`${card} relative flex cursor-pointer items-center gap-3 p-4 text-left transition ${
-                isPicked ? 'ring-2 ring-indigo-500' : 'hover:shadow-md'
-              }`}
+              className={`${card} relative flex cursor-pointer items-center gap-3 p-4 text-left transition ${isPicked ? 'ring-2 ring-indigo-500' : 'hover:shadow-md'
+                }`}
             >
               <SelectMark selected={isPicked} />
               {content}
@@ -148,7 +149,8 @@ export default function CollectionPage() {
         )
       })}
     </div>
-  )
+    )
+  }
 
   return (
     <div className="flex gap-8">
@@ -160,7 +162,6 @@ export default function CollectionPage() {
         <ItemBrowser
           scope="mine"
           title={nameOf(current)}
-          subtitle="Items and folders you've cataloged, public or private."
           actions={actions}
           collectionId={current.id}
           before={

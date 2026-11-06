@@ -6,7 +6,6 @@ export default function ExplorePage() {
     <ItemBrowser
       scope="public"
       title="Explore"
-      subtitle="Public items shared by collectors."
       before={<TopTags />}
     />
   )

@@ -11,6 +11,7 @@ A personal inventory and collection app. Catalog anything you collect (consoles,
 - Create, edit and delete items with a title, description, #hashtag tags and photos (0 to 20 per item)
 - Folders: every user has a root folder, and folders nest under it to any depth. Each item sits in one folder. Folders can be moved, renamed and set public or private
 - Folders can have an optional description (markdown, with a preview) and a banner image, shown at the top of the folder
+- Search matches titles, descriptions and tags, in the current folder or across all folders. The visibility toggle filters items and subfolders
 - A private folder hides everything inside it, even items marked public
 - Deleting a folder asks whether to delete its contents or move them up one level. Deleting everything is the default
 - Select mode in My collection: pick items and folders, then move them, change their visibility, or delete them together
