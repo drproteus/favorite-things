@@ -98,6 +98,12 @@ export const api = {
     request<Collection>('/collections', { method: 'POST', json: input }),
   updateCollection: (id: string, input: CollectionInput) =>
     request<Collection>(`/collections/${id}`, { method: 'PUT', json: input }),
+  uploadFolderBanner: (id: string, file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return request<Collection>(`/collections/${id}/banner`, { method: 'POST', body: form })
+  },
+  deleteFolderBanner: (id: string) => request<void>(`/collections/${id}/banner`, { method: 'DELETE' }),
   deleteCollection: (id: string, contents: DeleteContents) =>
     request<void>(`/collections/${id}?contents=${contents}`, { method: 'DELETE' }),
 

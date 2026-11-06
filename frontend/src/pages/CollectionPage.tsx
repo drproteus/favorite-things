@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { CheckSquare, ChevronRight, Folder, FolderPlus, Globe, Lock, MoveRight, Pencil, Plus, Trash2 } from 'lucide-react'
 import { BulkDeleteDialog, BulkMoveDialog, BulkVisibilityDialog } from '../components/BulkDialogs'
 import { DeleteFolderDialog, FolderFormDialog } from '../components/FolderDialogs'
+import FolderHeader from '../components/FolderHeader'
 import FolderTree from '../components/FolderTree'
 import ItemBrowser from '../components/ItemBrowser'
 import { SelectMark } from '../components/ItemCard'
@@ -162,7 +163,12 @@ export default function CollectionPage() {
           subtitle="Items and folders you've cataloged, public or private."
           actions={actions}
           collectionId={current.id}
-          before={breadcrumb}
+          before={
+            <div className="space-y-4">
+              {breadcrumb}
+              {!isRoot && <FolderHeader folder={current} />}
+            </div>
+          }
           folders={folderGrid}
           selection={{
             active: selecting,

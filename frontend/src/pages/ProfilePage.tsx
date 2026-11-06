@@ -1,5 +1,6 @@
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ChevronRight, Compass, Folder, Settings } from 'lucide-react'
+import FolderHeader from '../components/FolderHeader'
 import ItemCard from '../components/ItemCard'
 import Markdown from '../components/Markdown'
 import { EmptyState, ErrorState, Loading } from '../components/Status'
@@ -100,6 +101,8 @@ function FolderView({
           </span>
         ))}
       </nav>
+
+      {current.parentId !== null && <FolderHeader folder={current} />}
 
       {subfolders.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">

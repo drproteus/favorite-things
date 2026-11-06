@@ -34,6 +34,8 @@ export interface Collection {
   parentId: string | null
   name: string
   visibility: Visibility
+  description: string
+  bannerUrl: string | null
   createdAt: string
   updatedAt: string
 }
@@ -42,6 +44,7 @@ export interface CollectionInput {
   name: string
   visibility: Visibility
   parentId: string
+  description?: string
   // Also apply the visibility to every subfolder and item inside the folder.
   recursive?: boolean
 }

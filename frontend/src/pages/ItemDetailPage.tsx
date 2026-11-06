@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Check, Folder, Globe, ImageOff, Lock, Pencil, Share2 } from 'lucide-react'
 import { api } from '../api'
 import Markdown from '../components/Markdown'
+import { BulkMoveDialog } from '../components/BulkDialogs'
 import StarRating from '../components/StarRating'
 import { ErrorState, Loading } from '../components/Status'
 import { pathTo } from '../folders'
@@ -25,6 +26,7 @@ function ItemView({ item }: { item: Item }) {
   const { data: me } = useMe()
   const [active, setActive] = useState(0)
   const [copied, setCopied] = useState(false)
+  const [moving, setMoving] = useState(false)
 
   const isOwner = me?.id === item.ownerId
   const isPublic = item.visibility === 'public'
@@ -64,6 +66,18 @@ function ItemView({ item }: { item: Item }) {
 
   return (
     <div className="space-y-6">
+      {moving && folders.data && (
+        <BulkMoveDialog
+          folders={folders.data}
+          picked={{ itemIds: [item.id], folderIds: [] }}
+          defaultFolderId={item.collectionId}
+          onClose={() => setMoving(false)}
+          onDone={() => {
+            setMoving(false)
+            refresh()
+          }}
+        />
+      )}
       <Link
         to={isOwner ? '/collection' : '/explore'}
         className="inline-flex items-center gap-1 text-sm text-stone-500 hover:text-indigo-600 dark:text-stone-400"
@@ -184,6 +198,9 @@ function ItemView({ item }: { item: Item }) {
                 <Link to={`/items/${item.id}/edit`} className={btnPrimary}>
                   <Pencil size={16} /> Edit
                 </Link>
+                <button type="button" onClick={() => setMoving(true)} disabled={busy || !folders.data} className={btnSecondary}>
+                  <Folder size={16} /> Move
+                </button>
                 <button
                   type="button"
                   onClick={() => toggleVisibility.mutate(isPublic ? 'private' : 'public')}

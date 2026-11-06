@@ -22,12 +22,15 @@ var (
 )
 
 type Collection struct {
-	ID         string    `json:"id"`
-	ParentID   *string   `json:"parentId"`
-	Name       string    `json:"name"`
-	Visibility string    `json:"visibility"`
-	CreatedAt  time.Time `json:"createdAt"`
-	UpdatedAt  time.Time `json:"updatedAt"`
+	ID          string    `json:"id"`
+	ParentID    *string   `json:"parentId"`
+	Name        string    `json:"name"`
+	Visibility  string    `json:"visibility"`
+	Description string    `json:"description"`
+	BannerKey   *string   `json:"-"`
+	BannerURL   *string   `json:"bannerUrl"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
 // DeleteMode says what happens to a folder's contents when the folder is deleted.
@@ -70,7 +73,7 @@ func (s *Store) RootID(ctx context.Context, userID string) (string, error) {
 // List returns every folder the user owns, root first.
 func (s *Store) List(ctx context.Context, userID string) ([]Collection, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id::text, parent_id::text, name, visibility, created_at, updated_at
+		SELECT id::text, parent_id::text, name, visibility, description, banner_key, created_at, updated_at
 		FROM collections WHERE owner_id = $1::uuid
 		ORDER BY parent_id IS NOT NULL, lower(name)`, userID)
 	if err != nil {
@@ -83,7 +86,7 @@ func (s *Store) List(ctx context.Context, userID string) ([]Collection, error) {
 // it must be public. The root folder is always public.
 func (s *Store) ListPublic(ctx context.Context, userID string) ([]Collection, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT c.id::text, c.parent_id::text, c.name, c.visibility, c.created_at, c.updated_at
+		SELECT c.id::text, c.parent_id::text, c.name, c.visibility, c.description, c.banner_key, c.created_at, c.updated_at
 		FROM collections c
 		WHERE c.owner_id = $1::uuid AND NOT EXISTS (
 			WITH RECURSIVE up AS (
@@ -106,7 +109,7 @@ func (s *Store) Get(ctx context.Context, userID, id string) (*Collection, error)
 
 func get(ctx context.Context, q queryer, userID, id string) (*Collection, error) {
 	row := q.QueryRow(ctx, `
-		SELECT id::text, parent_id::text, name, visibility, created_at, updated_at
+		SELECT id::text, parent_id::text, name, visibility, description, banner_key, created_at, updated_at
 		FROM collections WHERE id = $2::uuid AND owner_id = $1::uuid`, userID, id)
 	c, err := scanCollection(row)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -129,15 +132,36 @@ func (s *Store) Create(ctx context.Context, userID, parentID, name, visibility s
 	row := s.pool.QueryRow(ctx, `
 		INSERT INTO collections (owner_id, parent_id, name, visibility)
 		VALUES ($1::uuid, $2::uuid, $3, $4)
-		RETURNING id::text, parent_id::text, name, visibility, created_at, updated_at`,
+		RETURNING id::text, parent_id::text, name, visibility, description, banner_key, created_at, updated_at`,
 		userID, parentID, name, visibility)
 	c, err := scanCollection(row)
 	return c, mapErr(err)
 }
 
-// Update changes a folder's name, visibility and parent. The root folder can't be changed.
+// SetBanner sets or clears (nil key) a folder's banner image and returns the previous key so the caller
+// can delete the old file. The root folder can't have a banner.
+func (s *Store) SetBanner(ctx context.Context, userID, id string, key *string) (*string, error) {
+	current, err := get(ctx, s.pool, userID, id)
+	if err != nil {
+		return nil, err
+	}
+	if current == nil {
+		return nil, ErrNotFound
+	}
+	if current.ParentID == nil {
+		return nil, ErrRoot
+	}
+	if _, err := s.pool.Exec(ctx,
+		`UPDATE collections SET banner_key = $3, updated_at = now() WHERE id = $2::uuid AND owner_id = $1::uuid`,
+		userID, id, key); err != nil {
+		return nil, err
+	}
+	return current.BannerKey, nil
+}
+
+// Update changes a folder's name, visibility, parent and description. The root folder can't be changed.
 // With recursive, the visibility also applies to every subfolder and item inside the folder.
-func (s *Store) Update(ctx context.Context, userID, id, name, visibility, parentID string, recursive bool) (Collection, error) {
+func (s *Store) Update(ctx context.Context, userID, id, name, visibility, parentID, description string, recursive bool) (Collection, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return Collection{}, err
@@ -159,10 +183,10 @@ func (s *Store) Update(ctx context.Context, userID, id, name, visibility, parent
 	}
 
 	row := tx.QueryRow(ctx, `
-		UPDATE collections SET name = $3, visibility = $4, parent_id = $5::uuid, updated_at = now()
+		UPDATE collections SET name = $3, visibility = $4, parent_id = $5::uuid, description = $6, updated_at = now()
 		WHERE id = $2::uuid AND owner_id = $1::uuid
-		RETURNING id::text, parent_id::text, name, visibility, created_at, updated_at`,
-		userID, id, name, visibility, parentID)
+		RETURNING id::text, parent_id::text, name, visibility, description, banner_key, created_at, updated_at`,
+		userID, id, name, visibility, parentID, description)
 	c, err := scanCollection(row)
 	if err != nil {
 		return Collection{}, mapErr(err)
@@ -392,6 +416,6 @@ func mapErr(err error) error {
 
 func scanCollection(row interface{ Scan(dest ...any) error }) (Collection, error) {
 	var c Collection
-	err := row.Scan(&c.ID, &c.ParentID, &c.Name, &c.Visibility, &c.CreatedAt, &c.UpdatedAt)
+	err := row.Scan(&c.ID, &c.ParentID, &c.Name, &c.Visibility, &c.Description, &c.BannerKey, &c.CreatedAt, &c.UpdatedAt)
 	return c, err
 }

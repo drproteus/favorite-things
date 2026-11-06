@@ -3,6 +3,8 @@ package collections
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -15,7 +17,18 @@ import (
 	"favorite-things/backend/internal/storage"
 )
 
-const maxNameLength = 100
+const (
+	maxNameLength        = 100
+	maxDescriptionLength = 2000
+	maxBannerBytes       = 10 << 20
+)
+
+var allowedBannerTypes = map[string]string{
+	"image/jpeg": ".jpg",
+	"image/png":  ".png",
+	"image/gif":  ".gif",
+	"image/webp": ".webp",
+}
 
 type Handler struct {
 	store *Store
@@ -35,6 +48,8 @@ func (h *Handler) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/collections/bulk/delete", auth.RequireUser(h.bulkDelete))
 	mux.HandleFunc("POST /api/collections/bulk/visibility", auth.RequireUser(h.bulkVisibility))
 	mux.HandleFunc("GET /api/users/{id}/collections", h.publicList)
+	mux.HandleFunc("POST /api/collections/{id}/banner", auth.RequireUser(h.uploadBanner))
+	mux.HandleFunc("DELETE /api/collections/{id}/banner", auth.RequireUser(h.deleteBanner))
 }
 
 // publicList returns the folders of one user that anyone can see, for their profile page.
@@ -52,7 +67,121 @@ func (h *Handler) publicList(w http.ResponseWriter, r *http.Request) {
 	if list == nil {
 		list = []Collection{}
 	}
+	if err := h.signAll(r.Context(), list); err != nil {
+		httpx.Internal(w, err)
+		return
+	}
 	httpx.JSON(w, http.StatusOK, list)
+}
+
+// sign adds a short-lived URL for the folder's banner, if it has one.
+func (h *Handler) sign(ctx context.Context, c *Collection) error {
+	if c.BannerKey == nil {
+		return nil
+	}
+	url, err := h.files.URL(ctx, *c.BannerKey)
+	if err != nil {
+		return err
+	}
+	c.BannerURL = &url
+	return nil
+}
+
+func (h *Handler) signAll(ctx context.Context, list []Collection) error {
+	for i := range list {
+		if err := h.sign(ctx, &list[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// uploadBanner sets a folder's banner image. The previous image, if any, is deleted.
+func (h *Handler) uploadBanner(w http.ResponseWriter, r *http.Request) {
+	u := auth.UserFrom(r.Context())
+	id, ok := parseID(w, r)
+	if !ok {
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxBannerBytes+(1<<20))
+	if err := r.ParseMultipartForm(maxBannerBytes); err != nil {
+		httpx.Error(w, http.StatusBadRequest, "invalid upload or file too large")
+		return
+	}
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, "missing file field")
+		return
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(io.LimitReader(file, maxBannerBytes+1))
+	if err != nil {
+		httpx.Internal(w, err)
+		return
+	}
+	if len(data) > maxBannerBytes {
+		httpx.Error(w, http.StatusRequestEntityTooLarge, "banner must be 10 MB or smaller")
+		return
+	}
+	contentType := http.DetectContentType(data)
+	ext, ok := allowedBannerTypes[contentType]
+	if !ok {
+		httpx.Error(w, http.StatusBadRequest, "unsupported image type; use JPEG, PNG, GIF or WebP")
+		return
+	}
+
+	key := fmt.Sprintf("collections/%s/%s%s", id, uuid.NewString(), ext)
+	if err := h.files.Put(r.Context(), key, contentType, data); err != nil {
+		httpx.Internal(w, err)
+		return
+	}
+	old, err := h.store.SetBanner(r.Context(), u.ID, id, &key)
+	if err != nil {
+		h.removeObjects(r.Context(), []string{key})
+		h.writeError(w, err)
+		return
+	}
+	if old != nil {
+		h.removeObjects(r.Context(), []string{*old})
+	}
+	h.writeFolder(w, r, u.ID, id, http.StatusOK)
+}
+
+// deleteBanner removes a folder's banner image.
+func (h *Handler) deleteBanner(w http.ResponseWriter, r *http.Request) {
+	u := auth.UserFrom(r.Context())
+	id, ok := parseID(w, r)
+	if !ok {
+		return
+	}
+	old, err := h.store.SetBanner(r.Context(), u.ID, id, nil)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	if old != nil {
+		h.removeObjects(r.Context(), []string{*old})
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// writeFolder loads one of the user's folders, signs its banner and writes it as JSON.
+func (h *Handler) writeFolder(w http.ResponseWriter, r *http.Request, userID, id string, status int) {
+	c, err := h.store.Get(r.Context(), userID, id)
+	if err != nil {
+		httpx.Internal(w, err)
+		return
+	}
+	if c == nil {
+		httpx.Error(w, http.StatusNotFound, ErrNotFound.Error())
+		return
+	}
+	if err := h.sign(r.Context(), c); err != nil {
+		httpx.Internal(w, err)
+		return
+	}
+	httpx.JSON(w, status, c)
 }
 
 func (h *Handler) bulkVisibility(w http.ResponseWriter, r *http.Request) {
@@ -153,14 +282,16 @@ func (h *Handler) removeObjects(ctx context.Context, keys []string) {
 }
 
 type body struct {
-	Name       string `json:"name"`
-	Visibility string `json:"visibility"`
-	ParentID   string `json:"parentId"`
-	Recursive  bool   `json:"recursive"`
+	Name        string `json:"name"`
+	Visibility  string `json:"visibility"`
+	ParentID    string `json:"parentId"`
+	Description string `json:"description"`
+	Recursive   bool   `json:"recursive"`
 }
 
 func (b *body) normalize() error {
 	b.Name = strings.Join(strings.Fields(b.Name), " ")
+	b.Description = strings.TrimSpace(b.Description)
 	if b.Visibility == "" {
 		b.Visibility = "private"
 	}
@@ -169,6 +300,8 @@ func (b *body) normalize() error {
 		return errors.New("name is required")
 	case utf8.RuneCountInString(b.Name) > maxNameLength:
 		return errors.New("name must be at most 100 characters")
+	case utf8.RuneCountInString(b.Description) > maxDescriptionLength:
+		return errors.New("description must be at most 2000 characters")
 	case b.Visibility != "public" && b.Visibility != "private":
 		return errors.New("visibility must be public or private")
 	}
@@ -188,6 +321,10 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	}
 	if list == nil {
 		list = []Collection{}
+	}
+	if err := h.signAll(r.Context(), list); err != nil {
+		httpx.Internal(w, err)
+		return
 	}
 	httpx.JSON(w, http.StatusOK, list)
 }
@@ -215,6 +352,10 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, err)
 		return
 	}
+	if err := h.sign(r.Context(), &c); err != nil {
+		httpx.Internal(w, err)
+		return
+	}
 	httpx.JSON(w, http.StatusCreated, c)
 }
 
@@ -240,9 +381,13 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	c, err := h.store.Update(r.Context(), u.ID, id, in.Name, in.Visibility, parentID, in.Recursive)
+	c, err := h.store.Update(r.Context(), u.ID, id, in.Name, in.Visibility, parentID, in.Description, in.Recursive)
 	if err != nil {
 		h.writeError(w, err)
+		return
+	}
+	if err := h.sign(r.Context(), &c); err != nil {
+		httpx.Internal(w, err)
 		return
 	}
 	httpx.JSON(w, http.StatusOK, c)

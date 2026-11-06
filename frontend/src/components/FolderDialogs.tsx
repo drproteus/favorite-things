@@ -1,10 +1,11 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api'
 import { useMe } from '../hooks'
 import { childrenOf, flattenFolders } from '../folders'
 import type { Collection, DeleteContents, Visibility } from '../types'
 import { btnDanger, btnDangerMuted, btnPrimary, btnSecondary, card, input, label } from '../ui'
+import MarkdownField from './MarkdownField'
 
 export function Modal({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) {
   return (
@@ -41,11 +42,47 @@ export function FolderFormDialog({ folders, folder, defaultParentId, onClose, on
   const [visibility, setVisibility] = useState<Visibility>(folder?.visibility ?? me.data?.defaultVisibility ?? 'public')
   const [parentId, setParentId] = useState(folder?.parentId ?? defaultParentId)
   const [recursive, setRecursive] = useState(false)
+  const [description, setDescription] = useState(folder?.description ?? '')
+  const [banner, setBanner] = useState<string | null>(folder?.bannerUrl ?? null)
+  const [bannerBusy, setBannerBusy] = useState(false)
+  const [bannerError, setBannerError] = useState('')
   const visibilityChanged = editing && !isRoot && visibility !== folder.visibility
+
+  const onBannerPick = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || !folder) return
+    setBannerBusy(true)
+    setBannerError('')
+    try {
+      const updated = await api.uploadFolderBanner(folder.id, file)
+      setBanner(updated.bannerUrl)
+      qc.invalidateQueries({ queryKey: ['collections'] })
+    } catch (err) {
+      setBannerError(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
+      setBannerBusy(false)
+    }
+  }
+
+  const removeBanner = async () => {
+    if (!folder) return
+    setBannerBusy(true)
+    setBannerError('')
+    try {
+      await api.deleteFolderBanner(folder.id)
+      setBanner(null)
+      qc.invalidateQueries({ queryKey: ['collections'] })
+    } catch (err) {
+      setBannerError(err instanceof Error ? err.message : 'Could not remove the image')
+    } finally {
+      setBannerBusy(false)
+    }
+  }
 
   const save = useMutation({
     mutationFn: () => {
-      const input = { name: name.trim(), visibility, parentId, recursive: visibilityChanged && recursive }
+      const input = { name: name.trim(), visibility, parentId, description, recursive: visibilityChanged && recursive }
       return editing ? api.updateCollection(folder.id, input) : api.createCollection(input)
     },
     onSuccess: () => {
@@ -119,6 +156,51 @@ export function FolderFormDialog({ folders, folder, defaultParentId, onClose, on
               A private folder hides everything inside it from other people, even items marked public.
             </p>
           </div>
+        )}
+
+        {editing && !isRoot && (
+          <>
+            <MarkdownField
+              id="folder-description"
+              labelText="Description"
+              rows={4}
+              maxLength={2000}
+              placeholder="What's in this folder?"
+              value={description}
+              onChange={setDescription}
+              help="Optional. Shown at the top of the folder. Supports the same markdown as item descriptions."
+            />
+
+            <div className="space-y-2">
+              <span className={label}>Banner image</span>
+              {banner && <img src={banner} alt="" className="h-28 w-full rounded-xl object-cover" />}
+              <div className="flex flex-wrap items-center gap-2">
+                <label className={`${btnSecondary} ${bannerBusy ? 'pointer-events-none opacity-50' : ''}`}>
+                  {bannerBusy ? 'Working…' : banner ? 'Replace image' : 'Add image'}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    className="sr-only"
+                    onChange={onBannerPick}
+                    disabled={bannerBusy}
+                  />
+                </label>
+                {banner && (
+                  <button type="button" onClick={removeBanner} disabled={bannerBusy} className={btnSecondary}>
+                    Remove
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-stone-500 dark:text-stone-400">
+                Shown across the top of the folder. JPEG, PNG, GIF or WebP, up to 10 MB. Saved as soon as you choose it.
+              </p>
+              {bannerError && (
+                <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">
+                  {bannerError}
+                </p>
+              )}
+            </div>
+          </>
         )}
 
         {visibilityChanged && (
