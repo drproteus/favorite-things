@@ -50,13 +50,15 @@ export default function Layout() {
             {me ? (
               <>
                 <div className="hidden items-center gap-2 md:flex">
-                  {me.avatarUrl ? (
-                    <img src={me.avatarUrl} alt="" className="h-8 w-8 rounded-full" referrerPolicy="no-referrer" />
-                  ) : (
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-stone-200 text-sm font-semibold dark:bg-stone-700">
-                      {me.name.charAt(0).toUpperCase()}
-                    </span>
-                  )}
+                  <Link to={`/users/${me.id}`} aria-label="My public profile" title="My public profile" className="rounded-full">
+                    {me.avatarUrl ? (
+                      <img src={me.avatarUrl} alt="" className="h-8 w-8 rounded-full" referrerPolicy="no-referrer" />
+                    ) : (
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-stone-200 text-sm font-semibold dark:bg-stone-700">
+                        {me.name.charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                  </Link>
                   <button onClick={signOut} className={btnGhost} aria-label="Sign out">
                     <LogOut size={16} />
                   </button>
