@@ -21,7 +21,10 @@ import (
 )
 
 func main() {
-	_ = godotenv.Load()
+	// godotenv never overrides variables already set, so the first file found wins per key.
+	for _, path := range []string{".env", "../.env"} {
+		_ = godotenv.Load(path)
+	}
 	if err := run(); err != nil {
 		slog.Error("server failed", "error", err)
 		os.Exit(1)

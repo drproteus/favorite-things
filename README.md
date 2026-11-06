@@ -45,13 +45,13 @@ Prerequisites: Go 1.26+, Node 24+, Docker.
 
    Postgres is exposed on host port **5433** (5432 is commonly taken by a local install). MinIO's console is at http://localhost:9001 (login `minioadmin` / `minioadmin`). The app creates the S3 bucket on startup.
 
-2. **Configure OAuth** (see below), then copy the env template:
+2. **Configure OAuth** (see below), then copy the env template to the repo root:
 
    ```sh
-   cp .env.example backend/.env   # or .env in the repo root; see note below
+   cp .env.example .env
    ```
 
-   The backend loads `.env` from its working directory. Run it from `backend/`, or export the variables yourself.
+   The API reads `.env` from the repo root whether you run it from the root or from `backend/`. Variables set in your shell take precedence over the file.
 
 3. **Run the API** (port 8080):
 
