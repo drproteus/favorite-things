@@ -84,6 +84,12 @@
         msg: "{{ build_result.stdout_lines }}"
 
   handlers:
+    - name: Restart PostgreSQL
+      ansible.builtin.systemd:
+        name: postgresql
+        state: restarted
+      listen: Restart PostgreSQL
+
     - name: Validate nginx configuration
       ansible.builtin.command:
         cmd: nginx -t
@@ -163,14 +169,28 @@
         - { path: "{{ favorite_things_letsencrypt_webroot }}/.well-known/acme-challenge", owner: root, group: root, mode: "0755" }
         - { path: "{{ favorite_things_minio_data_dir }}", owner: "{{ favorite_things_user }}", group: "{{ favorite_things_group }}", mode: "0750" }
 
+    - name: Configure PostgreSQL to accept local password connections
+      ansible.builtin.lineinfile:
+        path: /etc/postgresql/*/main/pg_hba.conf
+        regexp: '^local\s+all\s+all\s+peer'
+        line: 'local   all             all                                     md5'
+        state: present
+      notify: Restart PostgreSQL
+
+    - name: Restart PostgreSQL for config changes
+      ansible.builtin.systemd:
+        name: postgresql
+        state: restarted
+
     - name: Ensure the PostgreSQL user exists
       community.postgresql.postgresql_user:
         name: "{{ favorite_things_db_user }}"
         password: "{{ favorite_things_db_password }}"
         role_attr_flags: NOSUPERUSER,NOCREATEDB,NOCREATEROLE
         state: present
-        login_unix_socket: /var/run/postgresql
+        login_host: localhost
         login_user: postgres
+        login_password: "{{ postgres_superuser_password | default('postgres') }}"
       no_log: true
 
     - name: Ensure the PostgreSQL database exists
@@ -178,8 +198,9 @@
         name: "{{ favorite_things_db_name }}"
         owner: "{{ favorite_things_db_user }}"
         state: present
-        login_unix_socket: /var/run/postgresql
+        login_host: localhost
         login_user: postgres
+        login_password: "{{ postgres_superuser_password | default('postgres') }}"
 
     - name: Check if MinIO is installed
       ansible.builtin.stat:
