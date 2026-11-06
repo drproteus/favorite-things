@@ -21,8 +21,6 @@ import (
 const (
 	maxTitle      = 200
 	maxDesc       = 10000
-	maxTags       = 20
-	maxTagLength  = 40
 	maxImages     = 20
 	maxImageBytes = 10 << 20
 	explorePerCat = 12
@@ -40,7 +38,7 @@ type Input struct {
 	Description string   `json:"description"`
 	CategoryID  int64    `json:"categoryId"`
 	Visibility  string   `json:"visibility"`
-	Tags        []string `json:"tags"`
+	Tags        []string `json:"-"` // derived from #hashtags in Description
 }
 
 func (in *Input) normalize() error {
@@ -63,21 +61,9 @@ func (in *Input) normalize() error {
 		return errors.New("visibility must be public or private")
 	}
 
-	seen := make(map[string]bool, len(in.Tags))
-	tags := make([]string, 0, len(in.Tags))
-	for _, t := range in.Tags {
-		t = normalizeTag(t)
-		if t == "" || seen[t] {
-			continue
-		}
-		if utf8.RuneCountInString(t) > maxTagLength {
-			return fmt.Errorf("tag %q must be at most %d characters", t, maxTagLength)
-		}
-		seen[t] = true
-		tags = append(tags, t)
-	}
-	if len(tags) > maxTags {
-		return fmt.Errorf("at most %d tags are allowed", maxTags)
+	tags, err := hashtags(in.Description)
+	if err != nil {
+		return err
 	}
 	in.Tags = tags
 	return nil

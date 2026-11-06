@@ -1,6 +1,6 @@
-// Package catalog manages the site-wide categories and tags. Reads are public; changes
-// require an admin. Categories are a fixed list that items must reference. Tags are
-// suggestions that members can extend when they add a tag to an item.
+// Package catalog manages the site-wide categories. Reads are public; changes require an admin.
+// Items must reference one of these categories. Tags are not managed here: they are #hashtags
+// written into item descriptions.
 package catalog
 
 import (
@@ -25,16 +25,9 @@ var (
 	ErrInUse     = errors.New("this category is used by one or more items, so it can't be deleted")
 )
 
-// kind describes one managed table. Table names are internal constants, never user input.
-type kind struct {
-	table  string
-	maxLen int
-	lower  bool
-}
-
-var (
-	categoryKind = kind{table: "site_categories", maxLen: 50}
-	tagKind      = kind{table: "site_tags", maxLen: 40, lower: true}
+const (
+	categoryTable   = "site_categories"
+	categoryMaxName = 50
 )
 
 type Term struct {
@@ -42,16 +35,13 @@ type Term struct {
 	Name string `json:"name"`
 }
 
-func (k kind) normalize(raw string) (string, error) {
+func normalizeName(raw string) (string, error) {
 	name := strings.Join(strings.Fields(raw), " ")
-	if k.lower {
-		name = strings.ToLower(name)
-	}
 	switch {
 	case name == "":
 		return "", errors.New("name is required")
-	case utf8.RuneCountInString(name) > k.maxLen:
-		return "", fmt.Errorf("name must be at most %d characters", k.maxLen)
+	case utf8.RuneCountInString(name) > categoryMaxName:
+		return "", fmt.Errorf("name must be at most %d characters", categoryMaxName)
 	}
 	return name, nil
 }
@@ -64,9 +54,9 @@ func NewStore(pool *pgxpool.Pool) *Store {
 	return &Store{pool: pool}
 }
 
-func (s *Store) list(ctx context.Context, k kind) ([]Term, error) {
+func (s *Store) list(ctx context.Context) ([]Term, error) {
 	rows, err := s.pool.Query(ctx,
-		fmt.Sprintf(`SELECT id, name FROM %s ORDER BY sort_order, lower(name)`, k.table))
+		fmt.Sprintf(`SELECT id, name FROM %s ORDER BY sort_order, lower(name)`, categoryTable))
 	if err != nil {
 		return nil, err
 	}
@@ -77,20 +67,20 @@ func (s *Store) list(ctx context.Context, k kind) ([]Term, error) {
 	})
 }
 
-func (s *Store) create(ctx context.Context, k kind, name string) (Term, error) {
+func (s *Store) create(ctx context.Context, name string) (Term, error) {
 	var t Term
 	err := s.pool.QueryRow(ctx,
 		fmt.Sprintf(`INSERT INTO %[1]s (name, sort_order)
 			VALUES ($1, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM %[1]s))
-			RETURNING id, name`, k.table), name).
+			RETURNING id, name`, categoryTable), name).
 		Scan(&t.ID, &t.Name)
 	return t, mapErr(err)
 }
 
-func (s *Store) rename(ctx context.Context, k kind, id int64, name string) (Term, bool, error) {
+func (s *Store) rename(ctx context.Context, id int64, name string) (Term, bool, error) {
 	var t Term
 	err := s.pool.QueryRow(ctx,
-		fmt.Sprintf(`UPDATE %s SET name = $2 WHERE id = $1 RETURNING id, name`, k.table), id, name).
+		fmt.Sprintf(`UPDATE %s SET name = $2 WHERE id = $1 RETURNING id, name`, categoryTable), id, name).
 		Scan(&t.ID, &t.Name)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Term{}, false, nil
@@ -101,8 +91,8 @@ func (s *Store) rename(ctx context.Context, k kind, id int64, name string) (Term
 	return t, true, nil
 }
 
-func (s *Store) remove(ctx context.Context, k kind, id int64) (bool, error) {
-	tag, err := s.pool.Exec(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id = $1`, k.table), id)
+func (s *Store) remove(ctx context.Context, id int64) (bool, error) {
+	tag, err := s.pool.Exec(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id = $1`, categoryTable), id)
 	if err != nil {
 		return false, mapErr(err)
 	}
@@ -110,14 +100,14 @@ func (s *Store) remove(ctx context.Context, k kind, id int64) (bool, error) {
 }
 
 // reorder sets sort_order to each id's position in ids.
-func (s *Store) reorder(ctx context.Context, k kind, ids []int64) error {
+func (s *Store) reorder(ctx context.Context, ids []int64) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx)
 
-	stmt := fmt.Sprintf(`UPDATE %s SET sort_order = $2 WHERE id = $1`, k.table)
+	stmt := fmt.Sprintf(`UPDATE %s SET sort_order = $2 WHERE id = $1`, categoryTable)
 	for i, id := range ids {
 		if _, err := tx.Exec(ctx, stmt, id, i+1); err != nil {
 			return err
@@ -151,126 +141,108 @@ func NewHandler(store *Store) *Handler {
 func (h *Handler) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/catalog", h.catalog)
 
-	mux.HandleFunc("POST /api/admin/categories", auth.RequireAdmin(h.create(categoryKind)))
-	mux.HandleFunc("PUT /api/admin/categories/order", auth.RequireAdmin(h.reorder(categoryKind)))
-	mux.HandleFunc("PUT /api/admin/categories/{id}", auth.RequireAdmin(h.rename(categoryKind)))
-	mux.HandleFunc("DELETE /api/admin/categories/{id}", auth.RequireAdmin(h.remove(categoryKind)))
-
-	mux.HandleFunc("POST /api/admin/tags", auth.RequireAdmin(h.create(tagKind)))
-	mux.HandleFunc("PUT /api/admin/tags/order", auth.RequireAdmin(h.reorder(tagKind)))
-	mux.HandleFunc("PUT /api/admin/tags/{id}", auth.RequireAdmin(h.rename(tagKind)))
-	mux.HandleFunc("DELETE /api/admin/tags/{id}", auth.RequireAdmin(h.remove(tagKind)))
+	mux.HandleFunc("POST /api/admin/categories", auth.RequireAdmin(h.create))
+	mux.HandleFunc("PUT /api/admin/categories/order", auth.RequireAdmin(h.reorder))
+	mux.HandleFunc("PUT /api/admin/categories/{id}", auth.RequireAdmin(h.rename))
+	mux.HandleFunc("DELETE /api/admin/categories/{id}", auth.RequireAdmin(h.remove))
 }
 
 func (h *Handler) catalog(w http.ResponseWriter, r *http.Request) {
-	categories, err := h.store.list(r.Context(), categoryKind)
+	categories, err := h.store.list(r.Context())
 	if err != nil {
 		httpx.Internal(w, err)
 		return
 	}
-	tags, err := h.store.list(r.Context(), tagKind)
+	httpx.JSON(w, http.StatusOK, map[string][]Term{"categories": nonNil(categories)})
+}
+
+func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
+	name, ok := readName(w, r)
+	if !ok {
+		return
+	}
+	t, err := h.store.create(r.Context(), name)
+	if errors.Is(err, ErrDuplicate) {
+		httpx.Error(w, http.StatusConflict, err.Error())
+		return
+	}
 	if err != nil {
 		httpx.Internal(w, err)
 		return
 	}
-	httpx.JSON(w, http.StatusOK, map[string][]Term{"categories": nonNil(categories), "tags": nonNil(tags)})
+	httpx.JSON(w, http.StatusCreated, t)
 }
 
-func (h *Handler) create(k kind) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		name, ok := readName(w, r, k)
-		if !ok {
-			return
-		}
-		t, err := h.store.create(r.Context(), k, name)
-		if errors.Is(err, ErrDuplicate) {
-			httpx.Error(w, http.StatusConflict, err.Error())
-			return
-		}
-		if err != nil {
-			httpx.Internal(w, err)
-			return
-		}
-		httpx.JSON(w, http.StatusCreated, t)
+func (h *Handler) rename(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseID(w, r)
+	if !ok {
+		return
 	}
-}
-
-func (h *Handler) rename(k kind) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id, ok := parseID(w, r)
-		if !ok {
-			return
-		}
-		name, ok := readName(w, r, k)
-		if !ok {
-			return
-		}
-		t, found, err := h.store.rename(r.Context(), k, id, name)
-		if errors.Is(err, ErrDuplicate) {
-			httpx.Error(w, http.StatusConflict, err.Error())
-			return
-		}
-		if err != nil {
-			httpx.Internal(w, err)
-			return
-		}
-		if !found {
-			httpx.Error(w, http.StatusNotFound, "not found")
-			return
-		}
-		httpx.JSON(w, http.StatusOK, t)
+	name, ok := readName(w, r)
+	if !ok {
+		return
 	}
-}
-
-func (h *Handler) remove(k kind) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id, ok := parseID(w, r)
-		if !ok {
-			return
-		}
-		deleted, err := h.store.remove(r.Context(), k, id)
-		if errors.Is(err, ErrInUse) {
-			httpx.Error(w, http.StatusConflict, err.Error())
-			return
-		}
-		if err != nil {
-			httpx.Internal(w, err)
-			return
-		}
-		if !deleted {
-			httpx.Error(w, http.StatusNotFound, "not found")
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
+	t, found, err := h.store.rename(r.Context(), id, name)
+	if errors.Is(err, ErrDuplicate) {
+		httpx.Error(w, http.StatusConflict, err.Error())
+		return
 	}
-}
-
-func (h *Handler) reorder(k kind) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var body struct {
-			IDs []int64 `json:"ids"`
-		}
-		if err := httpx.Decode(r, &body); err != nil || len(body.IDs) == 0 {
-			httpx.Error(w, http.StatusBadRequest, "ids must be a non-empty list")
-			return
-		}
-		seen := make(map[int64]bool, len(body.IDs))
-		for _, id := range body.IDs {
-			if seen[id] {
-				httpx.Error(w, http.StatusBadRequest, "ids must not repeat")
-				return
-			}
-			seen[id] = true
-		}
-		if err := h.store.reorder(r.Context(), k, body.IDs); err != nil {
-			httpx.Internal(w, err)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
+	if err != nil {
+		httpx.Internal(w, err)
+		return
 	}
+	if !found {
+		httpx.Error(w, http.StatusNotFound, "not found")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, t)
 }
 
-func readName(w http.ResponseWriter, r *http.Request, k kind) (string, bool) {
+func (h *Handler) remove(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseID(w, r)
+	if !ok {
+		return
+	}
+	deleted, err := h.store.remove(r.Context(), id)
+	if errors.Is(err, ErrInUse) {
+		httpx.Error(w, http.StatusConflict, err.Error())
+		return
+	}
+	if err != nil {
+		httpx.Internal(w, err)
+		return
+	}
+	if !deleted {
+		httpx.Error(w, http.StatusNotFound, "not found")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) reorder(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		IDs []int64 `json:"ids"`
+	}
+	if err := httpx.Decode(r, &body); err != nil || len(body.IDs) == 0 {
+		httpx.Error(w, http.StatusBadRequest, "ids must be a non-empty list")
+		return
+	}
+	seen := make(map[int64]bool, len(body.IDs))
+	for _, id := range body.IDs {
+		if seen[id] {
+			httpx.Error(w, http.StatusBadRequest, "ids must not repeat")
+			return
+		}
+		seen[id] = true
+	}
+	if err := h.store.reorder(r.Context(), body.IDs); err != nil {
+		httpx.Internal(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func readName(w http.ResponseWriter, r *http.Request) (string, bool) {
 	var body struct {
 		Name string `json:"name"`
 	}
@@ -278,7 +250,7 @@ func readName(w http.ResponseWriter, r *http.Request, k kind) (string, bool) {
 		httpx.Error(w, http.StatusBadRequest, "invalid JSON body")
 		return "", false
 	}
-	name, err := k.normalize(body.Name)
+	name, err := normalizeName(body.Name)
 	if err != nil {
 		httpx.Error(w, http.StatusBadRequest, err.Error())
 		return "", false

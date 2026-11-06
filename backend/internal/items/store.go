@@ -72,7 +72,7 @@ func NewStore(pool *pgxpool.Pool) *Store {
 const itemSelect = `
 SELECT i.id::text, i.owner_id::text, u.name, i.title, i.description,
        COALESCE(i.category_id, 0), COALESCE(c.name, ''), i.visibility,
-       i.rating::int, i.created_at, i.updated_at
+       i.tags, i.rating::int, i.created_at, i.updated_at
 FROM items i
 JOIN users u ON u.id = i.owner_id
 LEFT JOIN site_categories c ON c.id = i.category_id`
@@ -105,9 +105,7 @@ func (s *Store) List(ctx context.Context, f Filter) ([]Item, error) {
 		conds = append(conds, fmt.Sprintf("(i.title ILIKE $%d OR i.description ILIKE $%d)", n, n))
 	}
 	if f.Tag != "" {
-		add(`EXISTS (
-			SELECT 1 FROM item_tags it JOIN tags t ON t.id = it.tag_id
-			WHERE it.item_id = i.id AND t.name = $%d)`, normalizeTag(f.Tag))
+		add("$%d = ANY(i.tags)", normalizeTag(f.Tag))
 	}
 
 	args = append(args, f.Limit, f.Offset)
@@ -122,7 +120,7 @@ func (s *Store) List(ctx context.Context, f Filter) ([]Item, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := s.loadDetails(ctx, list); err != nil {
+	if err := s.loadImages(ctx, list); err != nil {
 		return nil, err
 	}
 	return list, nil
@@ -194,55 +192,35 @@ func (s *Store) Get(ctx context.Context, viewer, id string) (*Item, error) {
 		return nil, err
 	}
 	list := []Item{it}
-	if err := s.loadDetails(ctx, list); err != nil {
+	if err := s.loadImages(ctx, list); err != nil {
 		return nil, err
 	}
 	return &list[0], nil
 }
 
 func (s *Store) Create(ctx context.Context, ownerID string, in Input) (string, error) {
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return "", err
-	}
-	defer tx.Rollback(ctx)
-
 	var id string
-	err = tx.QueryRow(ctx, `
-		INSERT INTO items (owner_id, title, description, category_id, visibility)
-		VALUES ($1::uuid, $2, $3, $4::bigint, $5)
+	err := s.pool.QueryRow(ctx, `
+		INSERT INTO items (owner_id, title, description, category_id, visibility, tags)
+		VALUES ($1::uuid, $2, $3, $4::bigint, $5, $6::text[])
 		RETURNING id::text`,
-		ownerID, in.Title, in.Description, in.CategoryID, in.Visibility).Scan(&id)
+		ownerID, in.Title, in.Description, in.CategoryID, in.Visibility, in.Tags).Scan(&id)
 	if err != nil {
 		return "", mapErr(err)
 	}
-	if err := syncTags(ctx, tx, ownerID, id, in.Tags); err != nil {
-		return "", err
-	}
-	return id, tx.Commit(ctx)
+	return id, nil
 }
 
 func (s *Store) Update(ctx context.Context, ownerID, id string, in Input) (bool, error) {
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return false, err
-	}
-	defer tx.Rollback(ctx)
-
-	tag, err := tx.Exec(ctx, `
-		UPDATE items SET title = $3, description = $4, category_id = $5::bigint, visibility = $6, updated_at = now()
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE items SET title = $3, description = $4, category_id = $5::bigint, visibility = $6,
+		                 tags = $7::text[], updated_at = now()
 		WHERE id = $2::uuid AND owner_id = $1::uuid`,
-		ownerID, id, in.Title, in.Description, in.CategoryID, in.Visibility)
+		ownerID, id, in.Title, in.Description, in.CategoryID, in.Visibility, in.Tags)
 	if err != nil {
 		return false, mapErr(err)
 	}
-	if tag.RowsAffected() == 0 {
-		return false, nil
-	}
-	if err := syncTags(ctx, tx, ownerID, id, in.Tags); err != nil {
-		return false, err
-	}
-	return true, tx.Commit(ctx)
+	return tag.RowsAffected() > 0, nil
 }
 
 // Delete removes the item and returns its image keys so the caller can clean up object storage.
@@ -321,18 +299,19 @@ func (s *Store) SetRating(ctx context.Context, ownerID, itemID string, rating *i
 	return tag.RowsAffected() > 0, nil
 }
 
+// ListTags returns every hashtag the user has used on their items, for filtering.
 func (s *Store) ListTags(ctx context.Context, userID string) ([]string, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT t.name FROM tags t
-		WHERE t.user_id = $1::uuid AND EXISTS (SELECT 1 FROM item_tags it WHERE it.tag_id = t.id)
-		ORDER BY t.name`, userID)
+		SELECT DISTINCT tag FROM items, unnest(tags) AS tag
+		WHERE owner_id = $1::uuid
+		ORDER BY tag`, userID)
 	if err != nil {
 		return nil, err
 	}
 	return pgx.CollectRows(rows, pgx.RowTo[string])
 }
 
-func (s *Store) loadDetails(ctx context.Context, list []Item) error {
+func (s *Store) loadImages(ctx context.Context, list []Item) error {
 	if len(list) == 0 {
 		return nil
 	}
@@ -341,29 +320,7 @@ func (s *Store) loadDetails(ctx context.Context, list []Item) error {
 	for i := range list {
 		ids[i] = list[i].ID
 		index[list[i].ID] = i
-		list[i].Tags = []string{}
 		list[i].Images = []Image{}
-	}
-
-	tagRows, err := s.pool.Query(ctx, `
-		SELECT it.item_id::text, t.name FROM item_tags it
-		JOIN tags t ON t.id = it.tag_id
-		WHERE it.item_id = ANY($1) ORDER BY t.name`, ids)
-	if err != nil {
-		return err
-	}
-	for tagRows.Next() {
-		var itemID, name string
-		if err := tagRows.Scan(&itemID, &name); err != nil {
-			tagRows.Close()
-			return err
-		}
-		i := index[itemID]
-		list[i].Tags = append(list[i].Tags, name)
-	}
-	tagRows.Close()
-	if err := tagRows.Err(); err != nil {
-		return err
 	}
 
 	imgRows, err := s.pool.Query(ctx, `
@@ -389,38 +346,11 @@ func (s *Store) loadDetails(ctx context.Context, list []Item) error {
 func scanItem(row interface{ Scan(dest ...any) error }) (Item, error) {
 	var it Item
 	err := row.Scan(&it.ID, &it.OwnerID, &it.OwnerName, &it.Title, &it.Description,
-		&it.CategoryID, &it.Category, &it.Visibility, &it.Rating, &it.CreatedAt, &it.UpdatedAt)
+		&it.CategoryID, &it.Category, &it.Visibility, &it.Tags, &it.Rating, &it.CreatedAt, &it.UpdatedAt)
+	if it.Tags == nil {
+		it.Tags = []string{}
+	}
 	return it, err
-}
-
-func syncTags(ctx context.Context, tx pgx.Tx, ownerID, itemID string, tags []string) error {
-	if _, err := tx.Exec(ctx, `DELETE FROM item_tags WHERE item_id = $1::uuid`, itemID); err != nil {
-		return err
-	}
-	for _, name := range tags {
-		// Member-added tags join the shared suggestion list at the end. Existing names are left alone.
-		if _, err := tx.Exec(ctx, `
-			INSERT INTO site_tags (name, sort_order)
-			VALUES ($1, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM site_tags))
-			ON CONFLICT DO NOTHING`, name); err != nil {
-			return err
-		}
-
-		var tagID int64
-		err := tx.QueryRow(ctx, `
-			INSERT INTO tags (user_id, name) VALUES ($1::uuid, $2)
-			ON CONFLICT (user_id, name) DO UPDATE SET name = EXCLUDED.name
-			RETURNING id`, ownerID, name).Scan(&tagID)
-		if err != nil {
-			return err
-		}
-		if _, err := tx.Exec(ctx,
-			`INSERT INTO item_tags (item_id, tag_id) VALUES ($1::uuid, $2) ON CONFLICT DO NOTHING`,
-			itemID, tagID); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func mapErr(err error) error {
@@ -429,10 +359,6 @@ func mapErr(err error) error {
 		return ErrUnknownCategory
 	}
 	return err
-}
-
-func normalizeTag(t string) string {
-	return strings.ToLower(strings.Join(strings.Fields(t), " "))
 }
 
 func nullable(s string) any {
