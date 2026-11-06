@@ -21,11 +21,13 @@ const sessionCookie = "fv_session"
 type contextKey struct{}
 
 type User struct {
-	ID        string `json:"id"`
-	Email     string `json:"email"`
-	Name      string `json:"name"`
-	AvatarURL string `json:"avatarUrl"`
-	IsAdmin   bool   `json:"isAdmin"`
+	ID                string `json:"id"`
+	Email             string `json:"email"`
+	Name              string `json:"name"`
+	AvatarURL         string `json:"avatarUrl"`
+	IsAdmin           bool   `json:"isAdmin"`
+	Profile           string `json:"profile"`
+	DefaultVisibility string `json:"defaultVisibility"`
 }
 
 // Service manages server-side sessions. Only a SHA-256 hash of each session token is stored.
@@ -58,11 +60,11 @@ func (s *Service) revokeSession(ctx context.Context, token string) error {
 func (s *Service) userForToken(ctx context.Context, token string) (*User, error) {
 	var u User
 	err := s.pool.QueryRow(ctx, `
-		SELECT u.id::text, COALESCE(u.email, ''), u.name, u.avatar_url, u.is_admin
+		SELECT u.id::text, COALESCE(u.email, ''), u.name, u.avatar_url, u.is_admin, u.profile, u.default_visibility
 		FROM sessions s
 		JOIN users u ON u.id = s.user_id
 		WHERE s.token_hash = $1 AND s.expires_at > now()`, hashToken(token)).
-		Scan(&u.ID, &u.Email, &u.Name, &u.AvatarURL, &u.IsAdmin)
+		Scan(&u.ID, &u.Email, &u.Name, &u.AvatarURL, &u.IsAdmin, &u.Profile, &u.DefaultVisibility)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}

@@ -14,6 +14,8 @@ A personal inventory and collection app. Catalog anything you collect (consoles,
 - Deleting a folder asks whether to delete its contents or move them up one level. Deleting everything is the default
 - Select mode in My collection: pick items and folders, then move them, change their visibility, or delete them together
 - Changing a folder's visibility can also apply to everything inside it
+- Profile page for each user at `/users/:id`, with a profile text and their public items. Anyone can see it
+- Settings page: profile text, and the default visibility for new items and folders (public by default)
 - Public or private visibility, toggled from the item page or the edit form
 - Explore page for public items, with search and tag filters
 - Drag-and-drop or browse to add photos
@@ -162,6 +164,9 @@ This starts Postgres, MinIO and the app at http://localhost:8080. Put your OAuth
 | POST | `/api/collections/bulk/delete?contents=delete\|move` | owner | Delete folders `{ "ids": [...] }`, with the same `contents` choice as above. All or nothing |
 | POST | `/api/collections/bulk/visibility` | owner | Set folders public or private `{ "ids": [...], "visibility", "recursive" }`. Folders you don't own are skipped |
 | GET | `/api/tags` | yes | Hashtags used on your items (for the filter) |
+| PUT | `/api/me` | yes | Update `{ "profile" (max 2000), "defaultVisibility": "public" \| "private" }` |
+| GET | `/api/users/{id}` | | Public profile: name, avatar, profile text. No email |
+| GET | `/api/users/{id}/items` | | That user's public items |
 
 Users are isolated: nobody can see or change another user's items or folders, and folders can only hold your own items and subfolders.
 

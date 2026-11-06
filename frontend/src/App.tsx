@@ -9,6 +9,8 @@ import ExplorePage from './pages/ExplorePage'
 import ItemDetailPage from './pages/ItemDetailPage'
 import ItemFormPage from './pages/ItemFormPage'
 import LoginPage from './pages/LoginPage'
+import ProfilePage from './pages/ProfilePage'
+import SettingsPage from './pages/SettingsPage'
 import { btnPrimary } from './ui'
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -25,6 +27,15 @@ export default function App() {
         <Route index element={<Navigate to="/collection" replace />} />
         <Route path="login" element={<LoginPage />} />
         <Route path="explore" element={<ExplorePage />} />
+        <Route path="users/:id" element={<ProfilePage />} />
+        <Route
+          path="settings"
+          element={
+            <RequireAuth>
+              <SettingsPage />
+            </RequireAuth>
+          }
+        />
         <Route path="items/:id" element={<ItemDetailPage />} />
         <Route
           path="collection"

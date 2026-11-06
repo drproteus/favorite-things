@@ -1,6 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api'
+import { useMe } from '../hooks'
 import { childrenOf, flattenFolders } from '../folders'
 import type { Collection, DeleteContents, Visibility } from '../types'
 import { btnDanger, btnDangerMuted, btnPrimary, btnSecondary, card, input, label } from '../ui'
@@ -36,7 +37,8 @@ export function FolderFormDialog({ folders, folder, defaultParentId, onClose, on
   const isRoot = editing && folder.parentId === null
 
   const [name, setName] = useState(folder?.name ?? '')
-  const [visibility, setVisibility] = useState<Visibility>(folder?.visibility ?? 'private')
+  const me = useMe()
+  const [visibility, setVisibility] = useState<Visibility>(folder?.visibility ?? me.data?.defaultVisibility ?? 'public')
   const [parentId, setParentId] = useState(folder?.parentId ?? defaultParentId)
   const [recursive, setRecursive] = useState(false)
   const visibilityChanged = editing && !isRoot && visibility !== folder.visibility

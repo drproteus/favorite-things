@@ -6,6 +6,21 @@ export interface User {
   name: string
   avatarUrl: string
   isAdmin: boolean
+  profile: string
+  defaultVisibility: Visibility
+}
+
+// What anyone can see about a user.
+export interface PublicUser {
+  id: string
+  name: string
+  avatarUrl: string
+  profile: string
+}
+
+export interface UserSettingsInput {
+  profile: string
+  defaultVisibility: Visibility
 }
 
 export interface ItemImage {

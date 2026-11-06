@@ -88,6 +88,7 @@ func (h *Handler) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/items/{id}/rating", auth.RequireUser(h.setRating))
 	mux.HandleFunc("DELETE /api/items/{id}/rating", auth.RequireUser(h.clearRating))
 	mux.HandleFunc("GET /api/tags", auth.RequireUser(h.tags))
+	mux.HandleFunc("GET /api/users/{id}/items", h.userItems)
 	mux.HandleFunc("POST /api/items/bulk/move", auth.RequireUser(h.bulkMove))
 	mux.HandleFunc("POST /api/items/bulk/delete", auth.RequireUser(h.bulkDelete))
 	mux.HandleFunc("POST /api/items/bulk/visibility", auth.RequireUser(h.bulkVisibility))
@@ -210,6 +211,34 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, list)
 }
 
+// userItems lists the public items of one user, for their profile page.
+func (h *Handler) userItems(w http.ResponseWriter, r *http.Request) {
+	owner, ok := parseID(w, r.PathValue("id"))
+	if !ok {
+		return
+	}
+	q := r.URL.Query()
+	list, err := h.store.List(r.Context(), Filter{
+		PublicOwnerID: owner,
+		Limit:         queryInt(q.Get("limit"), 24, 1, 100),
+		Offset:        queryInt(q.Get("offset"), 0, 0, 1_000_000),
+	})
+	if err != nil {
+		httpx.Internal(w, err)
+		return
+	}
+	if list == nil {
+		list = []Item{}
+	}
+	for i := range list {
+		if err := h.sign(r.Context(), list[i].Images); err != nil {
+			httpx.Internal(w, err)
+			return
+		}
+	}
+	httpx.JSON(w, http.StatusOK, list)
+}
+
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 	id, ok := parseID(w, r.PathValue("id"))
 	if !ok {
@@ -224,6 +253,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	if err := httpx.Decode(r, &in); err != nil {
 		httpx.Error(w, http.StatusBadRequest, "invalid JSON body")
 		return
+	}
+	if in.Visibility == "" {
+		in.Visibility = u.DefaultVisibility
 	}
 	if err := in.normalize(); err != nil {
 		httpx.Error(w, http.StatusBadRequest, err.Error())
@@ -252,6 +284,9 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	if err := httpx.Decode(r, &in); err != nil {
 		httpx.Error(w, http.StatusBadRequest, "invalid JSON body")
 		return
+	}
+	if in.Visibility == "" {
+		in.Visibility = u.DefaultVisibility
 	}
 	if err := in.normalize(); err != nil {
 		httpx.Error(w, http.StatusBadRequest, err.Error())

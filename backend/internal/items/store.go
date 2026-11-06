@@ -34,13 +34,14 @@ type Image struct {
 }
 
 type Filter struct {
-	OwnerID      string
-	CollectionID string
-	Query        string
-	Tag          string
-	Visibility   string
-	Limit        int
-	Offset       int
+	OwnerID       string
+	PublicOwnerID string
+	CollectionID  string
+	Query         string
+	Tag           string
+	Visibility    string
+	Limit         int
+	Offset        int
 }
 
 type Store struct {
@@ -82,6 +83,9 @@ func (s *Store) List(ctx context.Context, f Filter) ([]Item, error) {
 		add("i.owner_id = $%d::uuid", f.OwnerID)
 	} else {
 		conds = append(conds, publicClause)
+	}
+	if f.PublicOwnerID != "" {
+		add("i.owner_id = $%d::uuid", f.PublicOwnerID)
 	}
 	if f.CollectionID != "" {
 		add("i.collection_id = $%d::uuid", f.CollectionID)

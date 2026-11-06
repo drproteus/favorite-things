@@ -41,6 +41,23 @@ export function useItem(id: string, enabled = true) {
   })
 }
 
+export function usePublicUser(id: string) {
+  return useQuery({
+    queryKey: ['user', id],
+    queryFn: () => api.publicUser(id),
+    enabled: id !== '',
+    retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 2,
+  })
+}
+
+export function useUserItems(id: string) {
+  return useQuery({
+    queryKey: ['user-items', id],
+    queryFn: () => api.userItems(id),
+    enabled: id !== '',
+  })
+}
+
 export function useCollections(enabled = true) {
   return useQuery({
     queryKey: ['collections'],

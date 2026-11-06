@@ -145,7 +145,11 @@ function ItemView({ item }: { item: Item }) {
             </div>
             <h1 className="text-3xl font-bold tracking-tight">{item.title}</h1>
             <p className="text-sm text-stone-500 dark:text-stone-400">
-              Added by {item.ownerName} · updated {new Date(item.updatedAt).toLocaleDateString()}
+              Added by{' '}
+              <Link to={`/users/${item.ownerId}`} className="font-medium hover:text-indigo-600 dark:hover:text-indigo-400">
+                {item.ownerName}
+              </Link>{' '}
+              · updated {new Date(item.updatedAt).toLocaleDateString()}
             </p>
           </div>
 

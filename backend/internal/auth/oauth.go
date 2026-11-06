@@ -80,6 +80,8 @@ func (h *Handler) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/auth/{provider}/callback", h.Callback)
 	mux.HandleFunc("POST /api/auth/logout", h.Logout)
 	mux.HandleFunc("GET /api/me", h.Me)
+	mux.HandleFunc("PUT /api/me", RequireUser(h.UpdateMe))
+	mux.HandleFunc("GET /api/users/{id}", h.PublicUser)
 }
 
 func (h *Handler) Providers(w http.ResponseWriter, r *http.Request) {

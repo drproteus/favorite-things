@@ -17,6 +17,7 @@ export default function Layout() {
 
   const links = [
     ...(me ? [{ to: '/collection', label: 'My collection' }] : []),
+    ...(me ? [{ to: '/settings', label: 'Settings' }] : []),
     { to: '/explore', label: 'Explore' },
   ]
 

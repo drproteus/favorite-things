@@ -6,8 +6,10 @@ import type {
   ItemFilter,
   ItemImage,
   ItemInput,
+  PublicUser,
   Suggestion,
   User,
+  UserSettingsInput,
   Visibility,
 } from './types'
 
@@ -49,6 +51,9 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 export const api = {
   providers: () => request<{ providers: string[] }>('/auth/providers'),
   me: () => request<User>('/me'),
+  updateMe: (input: UserSettingsInput) => request<User>('/me', { method: 'PUT', json: input }),
+  publicUser: (id: string) => request<PublicUser>(`/users/${id}`),
+  userItems: (id: string) => request<Item[]>(`/users/${id}/items`),
   logout: () => request<void>('/auth/logout', { method: 'POST' }),
 
   listItems: (f: ItemFilter) => {

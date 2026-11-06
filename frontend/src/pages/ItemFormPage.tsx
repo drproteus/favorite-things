@@ -1,11 +1,12 @@
 import { useState, type ChangeEvent, type DragEvent, type FormEvent } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Globe, ImageOff, Lock, Sparkles, Upload, X } from 'lucide-react'
+import { ImageOff, Sparkles, Upload, X } from 'lucide-react'
 import { api } from '../api'
 import { ErrorState, Loading } from '../components/Status'
 import { flattenFolders, rootFolder } from '../folders'
-import { useCollections, useItem } from '../hooks'
+import VisibilityToggle from '../components/VisibilityToggle'
+import { useCollections, useItem, useMe } from '../hooks'
 import { itemToInput, type Collection, type Item, type ItemInput, type Visibility } from '../types'
 import { btnPrimary, btnSecondary, card, input, label } from '../ui'
 
@@ -30,6 +31,7 @@ export default function ItemFormPage() {
   const editing = id !== undefined
   const existing = useItem(id ?? '', editing)
   const folders = useCollections()
+  const me = useMe()
 
   if (editing && existing.isPending) return <Loading />
   if (editing && existing.error) return <ErrorState message={existing.error.message} />
@@ -39,16 +41,34 @@ export default function ItemFormPage() {
   const list = folders.data
   const requested = params.get('folder')
   const defaultFolder = list.find((c) => c.id === requested)?.id ?? rootFolder(list)?.id ?? ''
-  return <ItemForm key={id ?? 'new'} existing={existing.data} folders={list} defaultFolder={defaultFolder} />
+  return (
+    <ItemForm
+      key={id ?? 'new'}
+      existing={existing.data}
+      folders={list}
+      defaultFolder={defaultFolder}
+      defaultVisibility={me.data?.defaultVisibility ?? 'public'}
+    />
+  )
 }
 
-function ItemForm({ existing, folders, defaultFolder }: { existing?: Item; folders: Collection[]; defaultFolder: string }) {
+function ItemForm({
+  existing,
+  folders,
+  defaultFolder,
+  defaultVisibility,
+}: {
+  existing?: Item
+  folders: Collection[]
+  defaultFolder: string
+  defaultVisibility: Visibility
+}) {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const [form, setForm] = useState<ItemInput>(() =>
     existing
       ? itemToInput(existing)
-      : { title: '', description: '', collectionId: defaultFolder, visibility: 'private' },
+      : { title: '', description: '', collectionId: defaultFolder, visibility: defaultVisibility },
   )
   const [itemId, setItemId] = useState<string | undefined>(existing?.id)
   const [pending, setPending] = useState<PendingFile[]>([])
@@ -334,37 +354,6 @@ function ItemForm({ existing, folders, defaultFolder }: { existing?: Item; folde
           </button>
         </div>
       </form>
-    </div>
-  )
-}
-
-function VisibilityToggle({ value, onChange }: { value: Visibility; onChange: (v: Visibility) => void }) {
-  const options: { value: Visibility; icon: typeof Lock; text: string }[] = [
-    { value: 'private', icon: Lock, text: 'Private' },
-    { value: 'public', icon: Globe, text: 'Public' },
-  ]
-  return (
-    <div role="radiogroup" aria-label="Visibility" className="grid grid-cols-2 gap-1 rounded-lg bg-stone-100 p-1 dark:bg-stone-800">
-      {options.map((o) => {
-        const active = value === o.value
-        return (
-          <button
-            key={o.value}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            onClick={() => onChange(o.value)}
-            className={`flex cursor-pointer items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition ${
-              active
-                ? 'bg-white text-indigo-700 shadow-sm dark:bg-stone-900 dark:text-indigo-300'
-                : 'text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200'
-            }`}
-          >
-            <o.icon size={15} />
-            {o.text}
-          </button>
-        )
-      })}
     </div>
   )
 }

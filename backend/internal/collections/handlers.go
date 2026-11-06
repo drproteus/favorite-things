@@ -180,6 +180,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
+	if in.Visibility == "" {
+		in.Visibility = u.DefaultVisibility
+	}
 	if err := in.normalize(); err != nil {
 		httpx.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -206,6 +209,9 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	if err := httpx.Decode(r, &in); err != nil {
 		httpx.Error(w, http.StatusBadRequest, "invalid JSON body")
 		return
+	}
+	if in.Visibility == "" {
+		in.Visibility = u.DefaultVisibility
 	}
 	if err := in.normalize(); err != nil {
 		httpx.Error(w, http.StatusBadRequest, err.Error())
