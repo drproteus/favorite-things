@@ -41,6 +41,14 @@ export function useItem(id: string, enabled = true) {
   })
 }
 
+export function useCatalog() {
+  return useQuery({
+    queryKey: ['catalog'],
+    queryFn: api.catalog,
+    staleTime: 5 * 60_000,
+  })
+}
+
 export function useTags(enabled = true) {
   return useQuery({
     queryKey: ['tags'],

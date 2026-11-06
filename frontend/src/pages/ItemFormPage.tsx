@@ -1,11 +1,11 @@
-import { useState, type ChangeEvent, type FormEvent } from 'react'
+import { useState, type ChangeEvent, type DragEvent, type FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Globe, ImageOff, Lock, Upload, X } from 'lucide-react'
 import { api } from '../api'
 import TagInput from '../components/TagInput'
 import { ErrorState, Loading } from '../components/Status'
-import { useItem, useTags } from '../hooks'
+import { useCatalog, useItem, useTags } from '../hooks'
 import { itemToInput, type Item, type ItemInput, type Visibility } from '../types'
 import { btnPrimary, btnSecondary, card, input, label } from '../ui'
 
@@ -31,7 +31,9 @@ export default function ItemFormPage() {
 function ItemForm({ existing }: { existing?: Item }) {
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const tags = useTags()
+  const userTags = useTags()
+  const catalog = useCatalog()
+  const tagSuggestions = [...new Set([...(catalog.data?.tags.map((t) => t.name) ?? []), ...(userTags.data ?? [])])]
 
   const [form, setForm] = useState<ItemInput>(() =>
     existing
@@ -41,6 +43,7 @@ function ItemForm({ existing }: { existing?: Item }) {
   const [itemId, setItemId] = useState<string | undefined>(existing?.id)
   const [pending, setPending] = useState<PendingFile[]>([])
   const [fileError, setFileError] = useState('')
+  const [dragging, setDragging] = useState(false)
 
   const existingImages = existing?.images ?? []
   const imageCount = existingImages.length + pending.length
@@ -48,9 +51,7 @@ function ItemForm({ existing }: { existing?: Item }) {
   const update = <K extends keyof ItemInput>(key: K, value: ItemInput[K]) =>
     setForm((f) => ({ ...f, [key]: value }))
 
-  const addFiles = (e: ChangeEvent<HTMLInputElement>) => {
-    const picked = Array.from(e.target.files ?? [])
-    e.target.value = ''
+  const queueFiles = (picked: File[]) => {
     const accepted: PendingFile[] = []
     const errors: string[] = []
     for (const file of picked) {
@@ -65,6 +66,24 @@ function ItemForm({ existing }: { existing?: Item }) {
     }
     setFileError(errors.join('; '))
     setPending((p) => [...p, ...accepted])
+  }
+
+  const onPickFiles = (e: ChangeEvent<HTMLInputElement>) => {
+    queueFiles(Array.from(e.target.files ?? []))
+    e.target.value = ''
+  }
+
+  const onDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setDragging(false)
+    queueFiles(Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith('image/')))
+  }
+
+  const onDragOver = (e: DragEvent<HTMLDivElement>) => {
+    if (!Array.from(e.dataTransfer.types).includes('Files')) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = imageCount >= MAX_IMAGES ? 'none' : 'copy'
+    setDragging(true)
   }
 
   const removePending = (item: PendingFile) => {
@@ -169,11 +188,20 @@ function ItemForm({ existing }: { existing?: Item }) {
 
         <div>
           <span className={label}>Tags</span>
-          <TagInput value={form.tags} onChange={(t) => update('tags', t)} suggestions={tags.data ?? []} />
+          <TagInput value={form.tags} onChange={(t) => update('tags', t)} suggestions={tagSuggestions} />
           <p className="mt-1.5 text-xs text-stone-500 dark:text-stone-400">Press Enter or comma to add a tag.</p>
         </div>
 
-        <div className="space-y-3">
+        <div
+          className={`space-y-3 rounded-xl p-3 transition ${
+            dragging ? 'bg-indigo-50 ring-2 ring-indigo-500 ring-dashed dark:bg-indigo-950/40' : ''
+          }`}
+          onDragOver={onDragOver}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false)
+          }}
+          onDrop={onDrop}
+        >
           <div className="flex items-center justify-between">
             <span className={label}>Photos</span>
             <span className="text-xs text-stone-500 dark:text-stone-400">
@@ -183,7 +211,7 @@ function ItemForm({ existing }: { existing?: Item }) {
 
           {existingImages.length + pending.length === 0 && (
             <div className="flex h-24 items-center justify-center gap-2 rounded-xl border border-dashed border-stone-300 text-sm text-stone-400 dark:border-stone-700">
-              <ImageOff size={18} /> No photos yet
+              <ImageOff size={18} /> Drop photos here or use “Add photos”
             </div>
           )}
 
@@ -231,12 +259,14 @@ function ItemForm({ existing }: { existing?: Item }) {
               accept={ACCEPTED_TYPES.join(',')}
               multiple
               className="sr-only"
-              onChange={addFiles}
+              onChange={onPickFiles}
               disabled={imageCount >= MAX_IMAGES}
             />
           </label>
           {fileError && <p className="text-sm text-rose-600 dark:text-rose-400">{fileError}</p>}
-          <p className="text-xs text-stone-500 dark:text-stone-400">JPEG, PNG, GIF or WebP, up to 10 MB each.</p>
+          <p className="text-xs text-stone-500 dark:text-stone-400">
+            Drag and drop or browse. JPEG, PNG, GIF or WebP, up to 10 MB each.
+          </p>
         </div>
 
         {save.error && (
@@ -258,8 +288,8 @@ function ItemForm({ existing }: { existing?: Item }) {
       </form>
 
       <datalist id="category-options">
-        {['Consoles', 'Games', 'Albums', 'Vinyl', 'Books', 'T-shirts', 'Sneakers', 'Cameras', 'Toys'].map((c) => (
-          <option key={c} value={c} />
+        {catalog.data?.categories.map((c) => (
+          <option key={c.id} value={c.name} />
         ))}
       </datalist>
     </div>

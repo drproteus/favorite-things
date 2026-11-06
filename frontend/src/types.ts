@@ -5,7 +5,20 @@ export interface User {
   email: string
   name: string
   avatarUrl: string
+  isAdmin: boolean
 }
+
+export interface Term {
+  id: number
+  name: string
+}
+
+export interface Catalog {
+  categories: Term[]
+  tags: Term[]
+}
+
+export type TermKind = 'categories' | 'tags'
 
 export interface ItemImage {
   id: string
