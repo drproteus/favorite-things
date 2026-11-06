@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Check, Folder, Globe, ImageOff, Lock, Pencil, Share2 } from 'lucide-react'
+import { ArrowLeft, Check, Folder, Globe, ImageOff, Lock, Pencil, Share2, ChevronRight } from 'lucide-react'
 import { api } from '../api'
 import Markdown from '../components/Markdown'
 import { BulkMoveDialog } from '../components/BulkDialogs'
@@ -80,12 +80,40 @@ function ItemView({ item }: { item: Item }) {
           }}
         />
       )}
-      <Link
-        to={isOwner ? '/collection' : '/explore'}
-        className="inline-flex items-center gap-1 text-sm text-stone-500 hover:text-indigo-600 dark:text-stone-400"
-      >
-        <ArrowLeft size={16} /> Back
-      </Link>
+      {!isOwner && publicPath.length > 0 ? (
+        <nav
+          aria-label="Breadcrumb"
+          className="flex flex-wrap items-center gap-1 text-sm text-stone-500 dark:text-stone-400"
+        >
+          <Link to="/explore" className="hover:text-indigo-600 dark:hover:text-indigo-400">
+            Explore
+          </Link>
+          {publicPath.map((f, i) => (
+            <span key={f.id} className="flex items-center gap-1">
+              <ChevronRight size={14} />
+              {i === publicPath.length - 1 ? (
+                <span className="font-medium text-stone-800 dark:text-stone-200">
+                  {f.parentId === null ? `${item.ownerName}'s collection` : f.name}
+                </span>
+              ) : (
+                <Link
+                  to={`/users/${item.ownerId}/folders/${f.id}`}
+                  className="hover:text-indigo-600 dark:hover:text-indigo-400"
+                >
+                  {f.parentId === null ? `${item.ownerName}'s collection` : f.name}
+                </Link>
+              )}
+            </span>
+          ))}
+        </nav>
+      ) : (
+        <Link
+          to={isOwner ? '/collection' : '/explore'}
+          className="inline-flex items-center gap-1 text-sm text-stone-500 hover:text-indigo-600 dark:text-stone-400"
+        >
+          <ArrowLeft size={16} /> Back
+        </Link>
+      )}
 
       <div className="grid gap-8 lg:grid-cols-5">
         <section className="space-y-3 lg:col-span-3">
@@ -141,15 +169,6 @@ function ItemView({ item }: { item: Item }) {
                 <Link to={`/collection?folder=${item.collectionId}`} className={`${chip} inline-flex items-center gap-1`}>
                   <Folder size={12} />
                   {folderPath.map((f) => (f.parentId === null ? 'My collection' : f.name)).join(' / ')}
-                </Link>
-              )}
-              {!isOwner && publicPath.length > 0 && (
-                <Link
-                  to={`/users/${item.ownerId}/folders/${item.collectionId}`}
-                  className={`${chip} inline-flex items-center gap-1 transition hover:bg-indigo-100 dark:hover:bg-indigo-900`}
-                >
-                  <Folder size={12} />
-                  {publicPath.map((f) => (f.parentId === null ? `${item.ownerName}'s collection` : f.name)).join(' / ')}
                 </Link>
               )}
             </div>
