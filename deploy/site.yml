@@ -225,16 +225,32 @@
       ansible.builtin.shell:
         cmd: |
           set -e
+          export GOPATH=/tmp/go-minio
+          mkdir -p "$GOPATH"
+          echo "Building MinIO with GOPATH=$GOPATH, GOARCH={{ favorite_things_goarch }}"
           CGO_ENABLED=0 GOOS=linux GOARCH={{ favorite_things_goarch }} go install -ldflags="-s -w" github.com/minio/minio@latest
-          GOPATH=/tmp/go-minio
-          cp "$GOPATH/bin/minio" /usr/local/bin/minio || cp "$GOPATH/bin/linux_{{ favorite_things_goarch }}/minio" /usr/local/bin/minio
-          chmod 0755 /usr/local/bin/minio
-      environment:
-        GOPATH: /tmp/go-minio
+          echo "Build complete. Looking for binary..."
+          if [ -f "$GOPATH/bin/minio" ]; then
+            echo "Found at $GOPATH/bin/minio"
+            ls -lh "$GOPATH/bin/minio"
+          elif [ -f "$GOPATH/bin/linux_{{ favorite_things_goarch }}/minio" ]; then
+            echo "Found at $GOPATH/bin/linux_{{ favorite_things_goarch }}/minio"
+            ls -lh "$GOPATH/bin/linux_{{ favorite_things_goarch }}/minio"
+          else
+            echo "ERROR: minio binary not found!"
+            find "$GOPATH" -name "minio" -type f 2>/dev/null || echo "No minio files found"
+            exit 1
+          fi
       delegate_to: localhost
       become: false
       changed_when: true
       register: minio_build_result
+      ignore_errors: true
+
+    - name: Show MinIO build output
+      ansible.builtin.debug:
+        msg: "{{ minio_build_result.stdout_lines }}"
+      when: minio_build_result.stdout is defined
 
     - name: Transfer MinIO binary to target
       ansible.builtin.copy:
@@ -243,7 +259,7 @@
         owner: root
         group: root
         mode: "0755"
-      when: minio_build_result.changed
+      when: minio_build_result.rc == 0
 
     - name: Install the API binary
       ansible.builtin.copy:
