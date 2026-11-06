@@ -38,7 +38,7 @@ function ItemForm({ existing }: { existing?: Item }) {
   const [form, setForm] = useState<ItemInput>(() =>
     existing
       ? itemToInput(existing)
-      : { title: '', description: '', category: '', visibility: 'private', tags: [] },
+      : { title: '', description: '', categoryId: 0, visibility: 'private', tags: [] },
   )
   const [itemId, setItemId] = useState<string | undefined>(existing?.id)
   const [pending, setPending] = useState<PendingFile[]>([])
@@ -155,15 +155,22 @@ function ItemForm({ existing }: { existing?: Item }) {
             <label htmlFor="category" className={label}>
               Category
             </label>
-            <input
+            <select
               id="category"
               className={input}
-              list="category-options"
-              maxLength={100}
-              placeholder="Consoles, Albums, T-shirts…"
-              value={form.category}
-              onChange={(e) => update('category', e.target.value)}
-            />
+              required
+              value={form.categoryId || ''}
+              onChange={(e) => update('categoryId', Number(e.target.value))}
+            >
+              <option value="" disabled>
+                Choose a category
+              </option>
+              {catalog.data?.categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <span className={label}>Visibility</span>
@@ -281,17 +288,15 @@ function ItemForm({ existing }: { existing?: Item }) {
           <button type="button" onClick={() => navigate(-1)} className={btnSecondary}>
             Cancel
           </button>
-          <button type="submit" disabled={save.isPending || form.title.trim() === ''} className={btnPrimary}>
+          <button
+            type="submit"
+            disabled={save.isPending || form.title.trim() === '' || form.categoryId === 0}
+            className={btnPrimary}
+          >
             {save.isPending ? 'Saving…' : existing ? 'Save changes' : 'Create item'}
           </button>
         </div>
       </form>
-
-      <datalist id="category-options">
-        {catalog.data?.categories.map((c) => (
-          <option key={c.id} value={c.name} />
-        ))}
-      </datalist>
     </div>
   )
 }

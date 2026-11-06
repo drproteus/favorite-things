@@ -1,7 +1,7 @@
 import { useDeferredValue, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Compass, Plus, Search } from 'lucide-react'
-import { useItems, useTags } from '../hooks'
+import { useCatalog, useItems, useTags } from '../hooks'
 import type { ItemFilter, Visibility } from '../types'
 import { btnPrimary, input } from '../ui'
 import ItemCard from './ItemCard'
@@ -18,20 +18,20 @@ export default function ItemBrowser({ scope, title, subtitle, actions }: Props) 
   const mine = scope === 'mine'
   const [q, setQ] = useState('')
   const [tag, setTag] = useState('')
-  const [category, setCategory] = useState('')
+  const [categoryId, setCategoryId] = useState(0)
   const [visibility, setVisibility] = useState<Visibility | ''>('')
   const deferredQ = useDeferredValue(q)
-  const deferredCategory = useDeferredValue(category)
 
   const filter: ItemFilter = {
     scope,
     q: deferredQ,
     tag,
-    category: deferredCategory,
+    categoryId,
     visibility: mine ? visibility : '',
   }
   const items = useItems(filter)
   const tags = useTags(mine)
+  const catalog = useCatalog()
 
   return (
     <div className="space-y-6">
@@ -55,13 +55,19 @@ export default function ItemBrowser({ scope, title, subtitle, actions }: Props) 
           />
         </div>
         <div>
-          <input
+          <select
             className={input}
-            placeholder="Category"
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
+            value={categoryId}
+            onChange={(e) => setCategoryId(Number(e.target.value))}
             aria-label="Filter by category"
-          />
+          >
+            <option value={0}>All categories</option>
+            {catalog.data?.categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
         </div>
         {mine && (
           <>

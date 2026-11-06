@@ -41,6 +41,13 @@ export function useItem(id: string, enabled = true) {
   })
 }
 
+export function useExplore() {
+  return useQuery({
+    queryKey: ['explore'],
+    queryFn: api.explore,
+  })
+}
+
 export function useCatalog() {
   return useQuery({
     queryKey: ['catalog'],

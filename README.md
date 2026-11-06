@@ -10,12 +10,12 @@ A personal inventory and collection app. Catalog anything you collect (consoles,
 - Sign in with Google or GitHub (no passwords)
 - Create, edit and delete items with a title, description, category, tags and photos (0 to 20 per item)
 - Public or private visibility, toggled from the item page or the edit form
-- Explore page for public items, with search and category filters
+- Explore page for public items, grouped by category in the admin's order, with a random photo per category
 - Drag-and-drop or browse to add photos
 - Site-wide categories and tags, pre-loaded and suggested while editing items
 - Admins can add, rename and delete site categories and tags at `/admin`
 - Share public items with a copy-link button
-- 1 to 5 star ratings: each signed-in user can rate any item they can see, and the average is shown
+- 1 to 5 star rating on each item, set by its owner and shown to anyone who can see the item
 - Responsive layout with light and dark mode
 
 ## Project layout
@@ -130,13 +130,15 @@ This starts Postgres, MinIO and the app at http://localhost:8080. Put your OAuth
 | DELETE | `/api/items/{id}` | owner | Delete item and its photos |
 | POST | `/api/items/{id}/images` | owner | Upload photo (multipart field `file`) |
 | DELETE | `/api/items/{id}/images/{imageId}` | owner | Remove photo |
-| PUT | `/api/items/{id}/rating` | viewer of item | Set your rating `{ "rating": 1-5 }` |
-| DELETE | `/api/items/{id}/rating` | yes | Clear your rating |
+| PUT | `/api/items/{id}/rating` | owner | Set the rating `{ "rating": 1-5 }` |
+| DELETE | `/api/items/{id}/rating` | owner | Clear the rating |
 | GET | `/api/tags` | yes | Your tags (for autocomplete) |
-| GET | `/api/catalog` | | Site categories and tags |
+| GET | `/api/explore` | | Public items grouped by category, with a random cover photo |
+| GET | `/api/catalog` | | Site categories and tags, in display order |
 | POST | `/api/admin/{categories\|tags}` | admin | Add `{ "name": "..." }` |
 | PUT | `/api/admin/{categories\|tags}/{id}` | admin | Rename `{ "name": "..." }` |
-| DELETE | `/api/admin/{categories\|tags}/{id}` | admin | Delete |
+| PUT | `/api/admin/{categories\|tags}/order` | admin | Reorder `{ "ids": [...] }` |
+| DELETE | `/api/admin/{categories\|tags}/{id}` | admin | Delete (categories in use by items are refused) |
 
 ## Tests and checks
 

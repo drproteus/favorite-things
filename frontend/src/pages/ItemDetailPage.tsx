@@ -133,45 +133,30 @@ function ItemView({ item }: { item: Item }) {
             </p>
           </div>
 
-          <div className={`${card} space-y-4 p-5`}>
-            <div>
-              <div className="text-sm text-stone-500 dark:text-stone-400">
-                Average rating · {item.ratingCount} {item.ratingCount === 1 ? 'rating' : 'ratings'}
-              </div>
+          {(item.rating !== null || isOwner) && (
+            <div className={`${card} p-5`}>
+              <div className="text-sm text-stone-500 dark:text-stone-400">Rating</div>
               <div className="mt-1 flex items-center gap-2">
-                <StarRating value={item.avgRating} size={20} />
-                <span className="font-semibold">{item.ratingCount > 0 ? item.avgRating.toFixed(1) : '—'}</span>
-              </div>
-            </div>
-
-            <div className="border-t border-stone-200 pt-4 dark:border-stone-800">
-              {me ? (
-                <>
-                  <div className="text-sm text-stone-500 dark:text-stone-400">Your rating</div>
-                  <div className="mt-1 flex items-center gap-2">
+                {isOwner ? (
+                  <>
                     <StarRating
-                      value={item.myRating ?? 0}
+                      value={item.rating ?? 0}
                       onChange={(n) => rate.mutate(n)}
                       disabled={busy}
                       size={22}
                     />
-                    {item.myRating !== null && (
+                    {item.rating !== null && (
                       <button type="button" onClick={() => clearRating.mutate()} disabled={busy} className={btnGhost}>
                         Clear
                       </button>
                     )}
-                  </div>
-                </>
-              ) : (
-                <p className="text-sm text-stone-500 dark:text-stone-400">
-                  <Link to="/login" className="font-medium text-indigo-600 dark:text-indigo-400">
-                    Sign in
-                  </Link>{' '}
-                  to rate this item.
-                </p>
-              )}
+                  </>
+                ) : (
+                  <StarRating value={item.rating ?? 0} size={20} />
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {item.description && (
             <div className={`${card} p-5`}>

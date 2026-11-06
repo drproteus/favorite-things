@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Check, Pencil, Plus, Shield, Trash2, X } from 'lucide-react'
+import { Check, GripVertical, Pencil, Plus, Shield, Trash2, X } from 'lucide-react'
 import { api } from '../api'
 import { ErrorState, Loading } from '../components/Status'
 import { useCatalog } from '../hooks'
-import type { Term, TermKind } from '../types'
+import type { Catalog, Term, TermKind } from '../types'
 import { btnGhost, btnPrimary, card, input } from '../ui'
 
 export default function AdminPage() {
@@ -38,6 +38,7 @@ function TermManager({ kind, title, terms }: { kind: TermKind; title: string; te
   const [newName, setNewName] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editName, setEditName] = useState('')
+  const [dragId, setDragId] = useState<number | null>(null)
 
   const refresh = () => qc.invalidateQueries({ queryKey: ['catalog'] })
 
@@ -59,9 +60,34 @@ function TermManager({ kind, title, terms }: { kind: TermKind; title: string; te
     mutationFn: (id: number) => api.deleteTerm(kind, id),
     onSuccess: refresh,
   })
+  // Show the new order immediately; roll back if the server rejects it.
+  const reorder = useMutation({
+    mutationFn: (ids: number[]) => api.reorderTerms(kind, ids),
+    onMutate: async (ids) => {
+      await qc.cancelQueries({ queryKey: ['catalog'] })
+      const prev = qc.getQueryData<Catalog>(['catalog'])
+      if (prev) {
+        const byId = new Map(prev[kind].map((t) => [t.id, t]))
+        qc.setQueryData<Catalog>(['catalog'], { ...prev, [kind]: ids.flatMap((id) => byId.get(id) ?? []) })
+      }
+      return { prev }
+    },
+    onError: (_err, _ids, ctx) => {
+      if (ctx?.prev) qc.setQueryData(['catalog'], ctx.prev)
+    },
+    onSettled: refresh,
+  })
 
-  const busy = create.isPending || rename.isPending || remove.isPending
-  const error = [create, rename, remove].find((m) => m.error)?.error
+  const busy = create.isPending || rename.isPending || remove.isPending || reorder.isPending
+  const error = [create, rename, remove, reorder].find((m) => m.error)?.error
+
+  const moveBefore = (targetId: number) => {
+    if (dragId === null || dragId === targetId) return
+    const ids = terms.map((t) => t.id)
+    ids.splice(ids.indexOf(dragId), 1)
+    ids.splice(ids.indexOf(targetId), 0, dragId)
+    reorder.mutate(ids)
+  }
 
   const onAdd = (e: FormEvent) => {
     e.preventDefault()
@@ -109,7 +135,29 @@ function TermManager({ kind, title, terms }: { kind: TermKind; title: string; te
       ) : (
         <ul className="divide-y divide-stone-200 dark:divide-stone-800">
           {terms.map((t) => (
-            <li key={t.id} className="flex items-center gap-2 py-2">
+            <li
+              key={t.id}
+              draggable={editingId !== t.id && !busy}
+              onDragStart={(e) => {
+                e.dataTransfer.effectAllowed = 'move'
+                setDragId(t.id)
+              }}
+              onDragOver={(e) => {
+                if (dragId === null) return
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'move'
+              }}
+              onDrop={(e) => {
+                e.preventDefault()
+                moveBefore(t.id)
+                setDragId(null)
+              }}
+              onDragEnd={() => setDragId(null)}
+              className={`flex items-center gap-2 py-2 ${dragId === t.id ? 'opacity-40' : ''}`}
+            >
+              {editingId !== t.id && (
+                <GripVertical size={16} className="shrink-0 cursor-grab text-stone-400" aria-hidden="true" />
+              )}
               {editingId === t.id ? (
                 <form
                   className="flex flex-1 gap-2"

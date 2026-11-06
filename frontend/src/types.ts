@@ -32,13 +32,12 @@ export interface Item {
   ownerName: string
   title: string
   description: string
+  categoryId: number
   category: string
   visibility: Visibility
   tags: string[]
   images: ItemImage[]
-  avgRating: number
-  ratingCount: number
-  myRating: number | null
+  rating: number | null
   createdAt: string
   updatedAt: string
 }
@@ -46,7 +45,7 @@ export interface Item {
 export interface ItemInput {
   title: string
   description: string
-  category: string
+  categoryId: number
   visibility: Visibility
   tags: string[]
 }
@@ -55,15 +54,22 @@ export interface ItemFilter {
   scope: 'mine' | 'public'
   q?: string
   tag?: string
-  category?: string
+  categoryId?: number
   visibility?: Visibility | ''
+}
+
+export interface ExploreSection {
+  category: Term
+  count: number
+  cover: ItemImage | null
+  items: Item[]
 }
 
 export function itemToInput(item: Item): ItemInput {
   return {
     title: item.title,
     description: item.description,
-    category: item.category,
+    categoryId: item.categoryId,
     visibility: item.visibility,
     tags: item.tags,
   }
