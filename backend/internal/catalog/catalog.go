@@ -1,5 +1,6 @@
-// Package catalog manages the site-wide vocabulary of categories and tags that
-// users pick from. Reads are public; changes require an admin.
+// Package catalog manages the site-wide categories and tags. Reads are public; changes
+// require an admin. Categories are a fixed list that items must reference. Tags are
+// suggestions that members can extend when they add a tag to an item.
 package catalog
 
 import (
@@ -19,7 +20,10 @@ import (
 	"favorite-things/backend/internal/httpx"
 )
 
-var ErrDuplicate = errors.New("that name already exists")
+var (
+	ErrDuplicate = errors.New("that name already exists")
+	ErrInUse     = errors.New("this category is used by one or more items, so it can't be deleted")
+)
 
 // kind describes one managed table. Table names are internal constants, never user input.
 type kind struct {
@@ -61,7 +65,8 @@ func NewStore(pool *pgxpool.Pool) *Store {
 }
 
 func (s *Store) list(ctx context.Context, k kind) ([]Term, error) {
-	rows, err := s.pool.Query(ctx, fmt.Sprintf(`SELECT id, name FROM %s ORDER BY lower(name)`, k.table))
+	rows, err := s.pool.Query(ctx,
+		fmt.Sprintf(`SELECT id, name FROM %s ORDER BY sort_order, lower(name)`, k.table))
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +80,9 @@ func (s *Store) list(ctx context.Context, k kind) ([]Term, error) {
 func (s *Store) create(ctx context.Context, k kind, name string) (Term, error) {
 	var t Term
 	err := s.pool.QueryRow(ctx,
-		fmt.Sprintf(`INSERT INTO %s (name) VALUES ($1) RETURNING id, name`, k.table), name).
+		fmt.Sprintf(`INSERT INTO %[1]s (name, sort_order)
+			VALUES ($1, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM %[1]s))
+			RETURNING id, name`, k.table), name).
 		Scan(&t.ID, &t.Name)
 	return t, mapErr(err)
 }
@@ -97,15 +104,38 @@ func (s *Store) rename(ctx context.Context, k kind, id int64, name string) (Term
 func (s *Store) remove(ctx context.Context, k kind, id int64) (bool, error) {
 	tag, err := s.pool.Exec(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id = $1`, k.table), id)
 	if err != nil {
-		return false, err
+		return false, mapErr(err)
 	}
 	return tag.RowsAffected() > 0, nil
 }
 
+// reorder sets sort_order to each id's position in ids.
+func (s *Store) reorder(ctx context.Context, k kind, ids []int64) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	stmt := fmt.Sprintf(`UPDATE %s SET sort_order = $2 WHERE id = $1`, k.table)
+	for i, id := range ids {
+		if _, err := tx.Exec(ctx, stmt, id, i+1); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
 func mapErr(err error) error {
 	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+	if !errors.As(err, &pgErr) {
+		return err
+	}
+	switch pgErr.Code {
+	case "23505":
 		return ErrDuplicate
+	case "23503":
+		return ErrInUse
 	}
 	return err
 }
@@ -122,10 +152,12 @@ func (h *Handler) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/catalog", h.catalog)
 
 	mux.HandleFunc("POST /api/admin/categories", auth.RequireAdmin(h.create(categoryKind)))
+	mux.HandleFunc("PUT /api/admin/categories/order", auth.RequireAdmin(h.reorder(categoryKind)))
 	mux.HandleFunc("PUT /api/admin/categories/{id}", auth.RequireAdmin(h.rename(categoryKind)))
 	mux.HandleFunc("DELETE /api/admin/categories/{id}", auth.RequireAdmin(h.remove(categoryKind)))
 
 	mux.HandleFunc("POST /api/admin/tags", auth.RequireAdmin(h.create(tagKind)))
+	mux.HandleFunc("PUT /api/admin/tags/order", auth.RequireAdmin(h.reorder(tagKind)))
 	mux.HandleFunc("PUT /api/admin/tags/{id}", auth.RequireAdmin(h.rename(tagKind)))
 	mux.HandleFunc("DELETE /api/admin/tags/{id}", auth.RequireAdmin(h.remove(tagKind)))
 }
@@ -197,12 +229,41 @@ func (h *Handler) remove(k kind) http.HandlerFunc {
 			return
 		}
 		deleted, err := h.store.remove(r.Context(), k, id)
+		if errors.Is(err, ErrInUse) {
+			httpx.Error(w, http.StatusConflict, err.Error())
+			return
+		}
 		if err != nil {
 			httpx.Internal(w, err)
 			return
 		}
 		if !deleted {
 			httpx.Error(w, http.StatusNotFound, "not found")
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func (h *Handler) reorder(k kind) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			IDs []int64 `json:"ids"`
+		}
+		if err := httpx.Decode(r, &body); err != nil || len(body.IDs) == 0 {
+			httpx.Error(w, http.StatusBadRequest, "ids must be a non-empty list")
+			return
+		}
+		seen := make(map[int64]bool, len(body.IDs))
+		for _, id := range body.IDs {
+			if seen[id] {
+				httpx.Error(w, http.StatusBadRequest, "ids must not repeat")
+				return
+			}
+			seen[id] = true
+		}
+		if err := h.store.reorder(r.Context(), k, body.IDs); err != nil {
+			httpx.Internal(w, err)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)

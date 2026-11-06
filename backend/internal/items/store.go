@@ -8,8 +8,11 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+var ErrUnknownCategory = errors.New("choose a category from the list")
 
 type Item struct {
 	ID          string    `json:"id"`
@@ -17,13 +20,12 @@ type Item struct {
 	OwnerName   string    `json:"ownerName"`
 	Title       string    `json:"title"`
 	Description string    `json:"description"`
+	CategoryID  int64     `json:"categoryId"`
 	Category    string    `json:"category"`
 	Visibility  string    `json:"visibility"`
 	Tags        []string  `json:"tags"`
 	Images      []Image   `json:"images"`
-	AvgRating   float64   `json:"avgRating"`
-	RatingCount int       `json:"ratingCount"`
-	MyRating    *int      `json:"myRating"`
+	Rating      *int      `json:"rating"`
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
 }
@@ -35,11 +37,24 @@ type Image struct {
 	key      string
 }
 
+type Category struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
+// Section is one category on the Explore page: its public items plus a random cover photo.
+type Section struct {
+	Category Category `json:"category"`
+	Count    int      `json:"count"`
+	Cover    *Image   `json:"cover"`
+	Items    []Item   `json:"items"`
+}
+
 type Filter struct {
 	OwnerID    string
 	Query      string
 	Tag        string
-	Category   string
+	CategoryID int64
 	Visibility string
 	Limit      int
 	Offset     int
@@ -53,35 +68,36 @@ func NewStore(pool *pgxpool.Pool) *Store {
 	return &Store{pool: pool}
 }
 
-// itemSelect expects $1 to be the viewer's user id (or NULL for anonymous).
+// itemSelect has no viewer-specific columns, so it is safe for any caller.
 const itemSelect = `
-SELECT i.id::text, i.owner_id::text, u.name, i.title, i.description, i.category, i.visibility,
-       i.created_at, i.updated_at,
-       COALESCE((SELECT avg(r.rating)::float8 FROM item_ratings r WHERE r.item_id = i.id), 0),
-       (SELECT count(*)::int FROM item_ratings r WHERE r.item_id = i.id),
-       (SELECT r.rating::int FROM item_ratings r WHERE r.item_id = i.id AND r.user_id = $1::uuid)
+SELECT i.id::text, i.owner_id::text, u.name, i.title, i.description,
+       COALESCE(i.category_id, 0), COALESCE(c.name, ''), i.visibility,
+       i.rating::int, i.created_at, i.updated_at
 FROM items i
-JOIN users u ON u.id = i.owner_id`
+JOIN users u ON u.id = i.owner_id
+LEFT JOIN site_categories c ON c.id = i.category_id`
 
 var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
-func (s *Store) List(ctx context.Context, viewer string, f Filter) ([]Item, error) {
-	args := []any{nullable(viewer)}
+// List returns public items, or all items owned by Filter.OwnerID.
+func (s *Store) List(ctx context.Context, f Filter) ([]Item, error) {
+	var args []any
 	var conds []string
+	add := func(format string, v any) {
+		args = append(args, v)
+		conds = append(conds, fmt.Sprintf(format, len(args)))
+	}
 
 	if f.OwnerID != "" {
-		args = append(args, f.OwnerID)
-		conds = append(conds, fmt.Sprintf("i.owner_id = $%d::uuid", len(args)))
+		add("i.owner_id = $%d::uuid", f.OwnerID)
 	} else {
 		conds = append(conds, "i.visibility = 'public'")
 	}
 	if f.Visibility != "" {
-		args = append(args, f.Visibility)
-		conds = append(conds, fmt.Sprintf("i.visibility = $%d", len(args)))
+		add("i.visibility = $%d", f.Visibility)
 	}
-	if f.Category != "" {
-		args = append(args, strings.TrimSpace(f.Category))
-		conds = append(conds, fmt.Sprintf("i.category ILIKE $%d", len(args)))
+	if f.CategoryID != 0 {
+		add("i.category_id = $%d", f.CategoryID)
 	}
 	if f.Query != "" {
 		args = append(args, "%"+likeEscaper.Replace(f.Query)+"%")
@@ -89,10 +105,9 @@ func (s *Store) List(ctx context.Context, viewer string, f Filter) ([]Item, erro
 		conds = append(conds, fmt.Sprintf("(i.title ILIKE $%d OR i.description ILIKE $%d)", n, n))
 	}
 	if f.Tag != "" {
-		args = append(args, normalizeTag(f.Tag))
-		conds = append(conds, fmt.Sprintf(`EXISTS (
+		add(`EXISTS (
 			SELECT 1 FROM item_tags it JOIN tags t ON t.id = it.tag_id
-			WHERE it.item_id = i.id AND t.name = $%d)`, len(args)))
+			WHERE it.item_id = i.id AND t.name = $%d)`, normalizeTag(f.Tag))
 	}
 
 	args = append(args, f.Limit, f.Offset)
@@ -111,6 +126,59 @@ func (s *Store) List(ctx context.Context, viewer string, f Filter) ([]Item, erro
 		return nil, err
 	}
 	return list, nil
+}
+
+// Explore returns public items grouped by category, in the admin-defined category order.
+func (s *Store) Explore(ctx context.Context, perCategory int) ([]Section, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT c.id, c.name, count(i.id)::int
+		FROM site_categories c
+		JOIN items i ON i.category_id = c.id AND i.visibility = 'public'
+		GROUP BY c.id, c.name, c.sort_order
+		ORDER BY c.sort_order, c.name`)
+	if err != nil {
+		return nil, err
+	}
+	sections, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Section, error) {
+		var sec Section
+		err := r.Scan(&sec.Category.ID, &sec.Category.Name, &sec.Count)
+		return sec, err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range sections {
+		sec := &sections[i]
+		items, err := s.List(ctx, Filter{CategoryID: sec.Category.ID, Limit: perCategory})
+		if err != nil {
+			return nil, err
+		}
+		sec.Items = items
+		if sec.Cover, err = s.randomCover(ctx, sec.Category.ID); err != nil {
+			return nil, err
+		}
+	}
+	return sections, nil
+}
+
+func (s *Store) randomCover(ctx context.Context, categoryID int64) (*Image, error) {
+	var img Image
+	var itemID string
+	err := s.pool.QueryRow(ctx, `
+		SELECT ii.id::text, ii.item_id::text, ii.s3_key, ii.position
+		FROM item_images ii
+		JOIN items i ON i.id = ii.item_id
+		WHERE i.visibility = 'public' AND i.category_id = $1
+		ORDER BY random() LIMIT 1`, categoryID).
+		Scan(&img.ID, &itemID, &img.key, &img.Position)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &img, nil
 }
 
 // Get returns the item if it is public or owned by viewer; otherwise nil.
@@ -141,12 +209,12 @@ func (s *Store) Create(ctx context.Context, ownerID string, in Input) (string, e
 
 	var id string
 	err = tx.QueryRow(ctx, `
-		INSERT INTO items (owner_id, title, description, category, visibility)
-		VALUES ($1::uuid, $2, $3, $4, $5)
+		INSERT INTO items (owner_id, title, description, category_id, visibility)
+		VALUES ($1::uuid, $2, $3, $4::bigint, $5)
 		RETURNING id::text`,
-		ownerID, in.Title, in.Description, in.Category, in.Visibility).Scan(&id)
+		ownerID, in.Title, in.Description, in.CategoryID, in.Visibility).Scan(&id)
 	if err != nil {
-		return "", err
+		return "", mapErr(err)
 	}
 	if err := syncTags(ctx, tx, ownerID, id, in.Tags); err != nil {
 		return "", err
@@ -162,11 +230,11 @@ func (s *Store) Update(ctx context.Context, ownerID, id string, in Input) (bool,
 	defer tx.Rollback(ctx)
 
 	tag, err := tx.Exec(ctx, `
-		UPDATE items SET title = $3, description = $4, category = $5, visibility = $6, updated_at = now()
+		UPDATE items SET title = $3, description = $4, category_id = $5::bigint, visibility = $6, updated_at = now()
 		WHERE id = $2::uuid AND owner_id = $1::uuid`,
-		ownerID, id, in.Title, in.Description, in.Category, in.Visibility)
+		ownerID, id, in.Title, in.Description, in.CategoryID, in.Visibility)
 	if err != nil {
-		return false, err
+		return false, mapErr(err)
 	}
 	if tag.RowsAffected() == 0 {
 		return false, nil
@@ -242,24 +310,15 @@ func (s *Store) DeleteImage(ctx context.Context, ownerID, itemID, imageID string
 	return key, true, nil
 }
 
-// SetRating creates or updates a user's rating. The item must be public or owned by the user.
-func (s *Store) SetRating(ctx context.Context, userID, itemID string, rating int) (bool, error) {
+// SetRating stores the owner's rating for their own item. A nil rating clears it.
+func (s *Store) SetRating(ctx context.Context, ownerID, itemID string, rating *int) (bool, error) {
 	tag, err := s.pool.Exec(ctx, `
-		INSERT INTO item_ratings (item_id, user_id, rating)
-		SELECT i.id, $2::uuid, $3::smallint FROM items i
-		WHERE i.id = $1::uuid AND (i.visibility = 'public' OR i.owner_id = $2::uuid)
-		ON CONFLICT (item_id, user_id) DO UPDATE SET rating = EXCLUDED.rating, updated_at = now()`,
-		itemID, userID, rating)
+		UPDATE items SET rating = $3::smallint
+		WHERE id = $2::uuid AND owner_id = $1::uuid`, ownerID, itemID, rating)
 	if err != nil {
 		return false, err
 	}
 	return tag.RowsAffected() > 0, nil
-}
-
-func (s *Store) DeleteRating(ctx context.Context, userID, itemID string) error {
-	_, err := s.pool.Exec(ctx,
-		`DELETE FROM item_ratings WHERE item_id = $1::uuid AND user_id = $2::uuid`, itemID, userID)
-	return err
 }
 
 func (s *Store) ListTags(ctx context.Context, userID string) ([]string, error) {
@@ -329,8 +388,8 @@ func (s *Store) loadDetails(ctx context.Context, list []Item) error {
 
 func scanItem(row interface{ Scan(dest ...any) error }) (Item, error) {
 	var it Item
-	err := row.Scan(&it.ID, &it.OwnerID, &it.OwnerName, &it.Title, &it.Description, &it.Category,
-		&it.Visibility, &it.CreatedAt, &it.UpdatedAt, &it.AvgRating, &it.RatingCount, &it.MyRating)
+	err := row.Scan(&it.ID, &it.OwnerID, &it.OwnerName, &it.Title, &it.Description,
+		&it.CategoryID, &it.Category, &it.Visibility, &it.Rating, &it.CreatedAt, &it.UpdatedAt)
 	return it, err
 }
 
@@ -339,6 +398,14 @@ func syncTags(ctx context.Context, tx pgx.Tx, ownerID, itemID string, tags []str
 		return err
 	}
 	for _, name := range tags {
+		// Member-added tags join the shared suggestion list at the end. Existing names are left alone.
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO site_tags (name, sort_order)
+			VALUES ($1, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM site_tags))
+			ON CONFLICT DO NOTHING`, name); err != nil {
+			return err
+		}
+
 		var tagID int64
 		err := tx.QueryRow(ctx, `
 			INSERT INTO tags (user_id, name) VALUES ($1::uuid, $2)
@@ -354,6 +421,14 @@ func syncTags(ctx context.Context, tx pgx.Tx, ownerID, itemID string, tags []str
 		}
 	}
 	return nil
+}
+
+func mapErr(err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+		return ErrUnknownCategory
+	}
+	return err
 }
 
 func normalizeTag(t string) string {
