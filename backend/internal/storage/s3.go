@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -23,6 +24,7 @@ type Store struct {
 	client  *s3.Client
 	presign *s3.PresignClient
 	bucket  string
+	region  string
 }
 
 func New(cfg config.Config) *Store {
@@ -37,6 +39,7 @@ func New(cfg config.Config) *Store {
 		client:  newClient(cfg.S3Endpoint, cfg, creds),
 		presign: s3.NewPresignClient(newClient(publicEndpoint, cfg, creds)),
 		bucket:  cfg.S3Bucket,
+		region:  cfg.S3Region,
 	}
 }
 
@@ -52,14 +55,36 @@ func newClient(endpoint string, cfg config.Config, creds aws.CredentialsProvider
 	return s3.New(opts)
 }
 
+// isForbidden reports whether the error is an HTTP 403 from the storage service.
+func isForbidden(err error) bool {
+	var statusErr interface{ HTTPStatusCode() int }
+	return errors.As(err, &statusErr) && statusErr.HTTPStatusCode() == http.StatusForbidden
+}
+
+// createBucketInput sets the location constraint for every region except
+// us-east-1, where AWS rejects an explicit constraint.
+func (s *Store) createBucketInput() *s3.CreateBucketInput {
+	input := &s3.CreateBucketInput{Bucket: aws.String(s.bucket)}
+	if s.region != "" && s.region != "us-east-1" {
+		input.CreateBucketConfiguration = &types.CreateBucketConfiguration{
+			LocationConstraint: types.BucketLocationConstraint(s.region),
+		}
+	}
+	return input
+}
+
 // EnsureBucket creates the bucket if it does not exist. It retries while the endpoint is still starting up.
 func (s *Store) EnsureBucket(ctx context.Context) error {
 	var lastErr error
 	for attempt := 0; attempt < 30; attempt++ {
 		if _, err := s.client.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: aws.String(s.bucket)}); err == nil {
 			return nil
+		} else if isForbidden(err) {
+			// The bucket may exist but the credentials cannot see it. Creating it
+			// would also be denied, so fail with the real cause instead of retrying.
+			return fmt.Errorf("bucket %q is not accessible with these credentials (check the access key and s3:ListBucket): %w", s.bucket, err)
 		}
-		_, err := s.client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: aws.String(s.bucket)})
+		_, err := s.client.CreateBucket(ctx, s.createBucketInput())
 		var owned *types.BucketAlreadyOwnedByYou
 		if err == nil || errors.As(err, &owned) {
 			return nil
