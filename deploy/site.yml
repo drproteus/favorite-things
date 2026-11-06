@@ -51,25 +51,38 @@
       delegate_to: localhost
       become: false
 
-    - name: Build the API binary for the target
+    - name: Verify Go is installed on the controller
       ansible.builtin.command:
-        argv:
-          - go
-          - build
-          - -trimpath
-          - -ldflags
-          - -s -w
-          - -o
-          - "{{ favorite_things_build_dir }}/favorite-things"
-          - ./cmd/server
-        chdir: "{{ playbook_dir }}/.."
+        cmd: go version
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      register: go_version
+
+    - name: Show Go version
+      ansible.builtin.debug:
+        msg: "{{ go_version.stdout }}"
+
+    - name: Build the API binary for the target
+      ansible.builtin.shell:
+        cmd: |
+          set -e
+          cd "{{ playbook_dir }}/.."
+          go build -trimpath -ldflags="-s -w" -o "{{ favorite_things_build_dir }}/favorite-things" ./cmd/server
+          ls -la "{{ favorite_things_build_dir }}/favorite-things"
       environment:
         GOOS: linux
         GOARCH: "{{ favorite_things_goarch }}"
         CGO_ENABLED: "0"
+        PATH: "{{ ansible_env.PATH }}"
       delegate_to: localhost
       become: false
       changed_when: true
+      register: build_result
+
+    - name: Show build output
+      ansible.builtin.debug:
+        msg: "{{ build_result.stdout_lines }}"
 
   handlers:
     - name: Validate nginx configuration
