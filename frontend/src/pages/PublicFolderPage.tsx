@@ -4,16 +4,18 @@ import FolderHeader from '../components/FolderHeader'
 import ItemBrowser from '../components/ItemBrowser'
 import { EmptyState, ErrorState, Loading } from '../components/Status'
 import { childrenOf } from '../folders'
-import { usePublicCollections } from '../hooks'
+import { usePublicCollections, usePublicUser } from '../hooks'
 import { card } from '../ui'
 
 // A public folder on its own: its banner, description, subfolders and items. Nothing above it is shown.
 export default function PublicFolderPage() {
   const { id = '', folderId = '' } = useParams()
   const folders = usePublicCollections(id)
+  const profile = usePublicUser(id)
 
-  if (folders.isPending) return <Loading />
+  if (folders.isPending || profile.isPending) return <Loading />
   if (folders.error) return <ErrorState message={folders.error.message} />
+  if (profile.error) return <ErrorState message={profile.error.message || 'User not found.'} />
 
   const folder = folders.data.find((c) => c.id === folderId)
   if (!folder) {
@@ -29,7 +31,7 @@ export default function PublicFolderPage() {
     <ItemBrowser
       scope="public"
       owner={id}
-      title={folder.name}
+      title={folder.parentId === null ? `${profile.data.name}'s collection` : folder.name}
       collectionId={folder.id}
       before={<FolderHeader folder={folder} />}
       folders={() =>
