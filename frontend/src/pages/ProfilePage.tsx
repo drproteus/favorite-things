@@ -93,6 +93,7 @@ function FolderView({
       collectionId={current.id}
       before={
         <div className="space-y-4">
+          {path.length > 1 && (
           <nav aria-label="Folder path" className="flex flex-wrap items-center gap-1 text-sm text-stone-500 dark:text-stone-400">
             {path.map((f, i) => (
               <span key={f.id} className="flex items-center gap-1">
@@ -107,6 +108,7 @@ function FolderView({
               </span>
             ))}
           </nav>
+          )}
           {current.parentId !== null && <FolderHeader folder={current} />}
         </div>
       }

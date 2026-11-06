@@ -113,9 +113,8 @@ function ItemView({ item }: { item: Item }) {
                   type="button"
                   onClick={() => setActive(i)}
                   aria-label={`Show photo ${i + 1}`}
-                  className={`h-16 w-16 shrink-0 cursor-pointer overflow-hidden rounded-lg border-2 transition ${
-                    i === active ? 'border-indigo-500' : 'border-transparent opacity-70 hover:opacity-100'
-                  }`}
+                  className={`h-16 w-16 shrink-0 cursor-pointer overflow-hidden rounded-lg border-2 transition ${i === active ? 'border-indigo-500' : 'border-transparent opacity-70 hover:opacity-100'
+                    }`}
                 >
                   <img src={img.url} alt="" className="h-full w-full object-cover" />
                 </button>
@@ -128,11 +127,10 @@ function ItemView({ item }: { item: Item }) {
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               <span
-                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                  isPublic
+                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${isPublic
                     ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
                     : 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300'
-                }`}
+                  }`}
               >
                 {isPublic ? <Globe size={12} /> : <Lock size={12} />}
                 {isPublic ? 'Public' : 'Private'}
@@ -200,15 +198,6 @@ function ItemView({ item }: { item: Item }) {
                 </Link>
                 <button type="button" onClick={() => setMoving(true)} disabled={busy || !folders.data} className={btnSecondary}>
                   <Folder size={16} /> Move
-                </button>
-                <button
-                  type="button"
-                  onClick={() => toggleVisibility.mutate(isPublic ? 'private' : 'public')}
-                  disabled={busy}
-                  className={btnSecondary}
-                >
-                  {isPublic ? <Lock size={16} /> : <Globe size={16} />}
-                  {isPublic ? 'Make private' : 'Make public'}
                 </button>
               </>
             )}

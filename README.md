@@ -27,6 +27,28 @@ A personal inventory and collection app. Catalog anything you collect (consoles,
 - 1 to 5 star rating on each item, set by its owner and shown to anyone who can see the item
 - Responsive layout with light and dark mode
 
+## Screenshots
+
+The collection, with nested folders in the sidebar:
+
+![My collection](docs/screenshots/collection.png)
+
+Inside a folder, with the breadcrumb and search scope:
+
+![A folder](docs/screenshots/folder.png)
+
+An item, with its photos, folder, rating, markdown description and hashtags:
+
+![An item](docs/screenshots/item.png)
+
+Explore, with the most-used public tags:
+
+![Explore](docs/screenshots/explore.png)
+
+A public profile:
+
+![Profile](docs/screenshots/profile.png)
+
 ## Project layout
 
 ```
