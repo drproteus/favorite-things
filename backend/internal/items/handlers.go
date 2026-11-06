@@ -23,7 +23,6 @@ const (
 	maxDesc       = 10000
 	maxImages     = 20
 	maxImageBytes = 10 << 20
-	explorePerCat = 12
 )
 
 var allowedImageTypes = map[string]string{
@@ -36,7 +35,6 @@ var allowedImageTypes = map[string]string{
 type Input struct {
 	Title       string   `json:"title"`
 	Description string   `json:"description"`
-	CategoryID  int64    `json:"categoryId"`
 	Visibility  string   `json:"visibility"`
 	Tags        []string `json:"-"` // derived from #hashtags in Description
 }
@@ -55,8 +53,6 @@ func (in *Input) normalize() error {
 		return fmt.Errorf("title must be at most %d characters", maxTitle)
 	case utf8.RuneCountInString(in.Description) > maxDesc:
 		return fmt.Errorf("description must be at most %d characters", maxDesc)
-	case in.CategoryID <= 0:
-		return errors.New("category is required")
 	case in.Visibility != "public" && in.Visibility != "private":
 		return errors.New("visibility must be public or private")
 	}
@@ -79,7 +75,6 @@ func NewHandler(store *Store, files *storage.Store) *Handler {
 }
 
 func (h *Handler) Routes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /api/explore", h.explore)
 	mux.HandleFunc("GET /api/items", h.list)
 	mux.HandleFunc("POST /api/items", auth.RequireUser(h.create))
 	mux.HandleFunc("GET /api/items/{id}", h.get)
@@ -92,47 +87,13 @@ func (h *Handler) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/tags", auth.RequireUser(h.tags))
 }
 
-func (h *Handler) explore(w http.ResponseWriter, r *http.Request) {
-	sections, err := h.store.Explore(r.Context(), explorePerCat)
-	if err != nil {
-		httpx.Internal(w, err)
-		return
-	}
-	if sections == nil {
-		sections = []Section{}
-	}
-	for i := range sections {
-		sec := &sections[i]
-		if sec.Items == nil {
-			sec.Items = []Item{}
-		}
-		for j := range sec.Items {
-			if err := h.sign(r.Context(), sec.Items[j].Images); err != nil {
-				httpx.Internal(w, err)
-				return
-			}
-		}
-		if sec.Cover != nil {
-			url, err := h.files.URL(r.Context(), sec.Cover.key)
-			if err != nil {
-				httpx.Internal(w, err)
-				return
-			}
-			sec.Cover.URL = url
-		}
-	}
-	httpx.JSON(w, http.StatusOK, sections)
-}
-
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	viewer := viewerID(r)
 	q := r.URL.Query()
-	categoryID, _ := strconv.ParseInt(q.Get("category"), 10, 64)
 
 	f := Filter{
 		Query:      strings.TrimSpace(q.Get("q")),
 		Tag:        q.Get("tag"),
-		CategoryID: categoryID,
 		Visibility: q.Get("visibility"),
 		Limit:      queryInt(q.Get("limit"), 24, 1, 100),
 		Offset:     queryInt(q.Get("offset"), 0, 0, 1_000_000),
@@ -184,10 +145,6 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, err := h.store.Create(r.Context(), u.ID, in)
-	if errors.Is(err, ErrUnknownCategory) {
-		httpx.Error(w, http.StatusBadRequest, err.Error())
-		return
-	}
 	if err != nil {
 		httpx.Internal(w, err)
 		return
@@ -211,10 +168,6 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	updated, err := h.store.Update(r.Context(), u.ID, id, in)
-	if errors.Is(err, ErrUnknownCategory) {
-		httpx.Error(w, http.StatusBadRequest, err.Error())
-		return
-	}
 	if err != nil {
 		httpx.Internal(w, err)
 		return
