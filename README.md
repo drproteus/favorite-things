@@ -11,6 +11,9 @@ A personal inventory and collection app. Catalog anything you collect (consoles,
 - Create, edit and delete items with a title, description, category, tags and photos (0 to 20 per item)
 - Public or private visibility, toggled from the item page or the edit form
 - Explore page for public items, with search and category filters
+- Drag-and-drop or browse to add photos
+- Site-wide categories and tags, pre-loaded and suggested while editing items
+- Admins can add, rename and delete site categories and tags at `/admin`
 - Share public items with a copy-link button
 - 1 to 5 star ratings: each signed-in user can rate any item they can see, and the average is shown
 - Responsive layout with light and dark mode
@@ -70,6 +73,21 @@ Prerequisites: Go 1.26+, Node 24+, Docker.
 
    Open http://localhost:5173.
 
+## Admin access
+
+Admin access is granted from the command line, not the web UI. The person must sign in at least once first, so their account exists.
+
+Run these from the `backend/` directory. They read the same `.env` as the API and run migrations automatically.
+
+```sh
+go run ./cmd/admin list                       # list users, IDs and admin status
+go run ./cmd/admin grant  you@example.com     # grant admin by email
+go run ./cmd/admin revoke you@example.com     # revoke admin
+go run ./cmd/admin grant  <user-id>           # or by user ID (use this if the account has no email)
+```
+
+Admins see an **Admin** link in the header. Changing categories or tags only affects the suggestions offered to members. Existing items keep the values they already have.
+
 ## OAuth setup
 
 Redirect URIs use `PUBLIC_URL`, which defaults to `http://localhost:8080`.
@@ -115,6 +133,10 @@ This starts Postgres, MinIO and the app at http://localhost:8080. Put your OAuth
 | PUT | `/api/items/{id}/rating` | viewer of item | Set your rating `{ "rating": 1-5 }` |
 | DELETE | `/api/items/{id}/rating` | yes | Clear your rating |
 | GET | `/api/tags` | yes | Your tags (for autocomplete) |
+| GET | `/api/catalog` | | Site categories and tags |
+| POST | `/api/admin/{categories\|tags}` | admin | Add `{ "name": "..." }` |
+| PUT | `/api/admin/{categories\|tags}/{id}` | admin | Rename `{ "name": "..." }` |
+| DELETE | `/api/admin/{categories\|tags}/{id}` | admin | Delete |
 
 ## Tests and checks
 
