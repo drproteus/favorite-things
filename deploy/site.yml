@@ -221,17 +221,29 @@
       changed_when: false
       failed_when: false
 
-    - name: Check if MinIO is installed
-      ansible.builtin.stat:
-        path: /usr/local/bin/minio
-      register: favorite_things_minio_stat
+    - name: Build and install MinIO from source
+      ansible.builtin.shell:
+        cmd: |
+          set -e
+          CGO_ENABLED=0 GOOS=linux GOARCH={{ favorite_things_goarch }} go install -ldflags="-s -w" github.com/minio/minio@latest
+          GOPATH=/tmp/go-minio
+          cp "$GOPATH/bin/minio" /usr/local/bin/minio || cp "$GOPATH/bin/linux_{{ favorite_things_goarch }}/minio" /usr/local/bin/minio
+          chmod 0755 /usr/local/bin/minio
+      environment:
+        GOPATH: /tmp/go-minio
+      delegate_to: localhost
+      become: false
+      changed_when: true
+      register: minio_build_result
 
-    - name: Download MinIO
-      ansible.builtin.get_url:
-        url: "https://dl.min.io/server/minio/release/linux-{{ favorite_things_goarch }}/minio"
+    - name: Transfer MinIO binary to target
+      ansible.builtin.copy:
+        src: /tmp/go-minio/bin/minio
         dest: /usr/local/bin/minio
+        owner: root
+        group: root
         mode: "0755"
-      when: not favorite_things_minio_stat.stat.exists
+      when: minio_build_result.changed
 
     - name: Install the API binary
       ansible.builtin.copy:
