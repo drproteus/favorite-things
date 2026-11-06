@@ -5,6 +5,7 @@ import { ImageOff, Sparkles, Upload, X } from 'lucide-react'
 import { api } from '../api'
 import { ErrorState, Loading } from '../components/Status'
 import { flattenFolders, rootFolder } from '../folders'
+import MarkdownField from '../components/MarkdownField'
 import VisibilityToggle from '../components/VisibilityToggle'
 import { useCollections, useItem, useMe } from '../hooks'
 import { itemToInput, type Collection, type Item, type ItemInput, type Visibility } from '../types'
@@ -240,23 +241,16 @@ function ItemForm({
           </div>
         </div>
 
-        <div>
-          <label htmlFor="description" className={label}>
-            Description
-          </label>
-          <textarea
-            id="description"
-            className={`${input} min-h-32 resize-y`}
-            rows={5}
-            maxLength={10000}
-            placeholder="Condition, where you got it, why you love it… #vintage #mint"
-            value={form.description}
-            onChange={(e) => update('description', e.target.value)}
-          />
-          <p className="mt-1.5 text-xs text-stone-500 dark:text-stone-400">
-            Add tags as #hashtags anywhere in the description.
-          </p>
-        </div>
+        <MarkdownField
+          id="description"
+          labelText="Description"
+          rows={5}
+          maxLength={10000}
+          placeholder="Condition, where you got it, why you love it… #vintage #mint"
+          value={form.description}
+          onChange={(v) => update('description', v)}
+          help="Add tags as #hashtags anywhere in the description. Bold, italic, links, lists, quotes and inline code also work."
+        />
 
         <div
           className={`space-y-3 rounded-xl p-3 transition ${

@@ -50,15 +50,19 @@ function linkHashtags() {
 
 const linkBase = 'underline underline-offset-2 hover:text-indigo-500 dark:hover:text-indigo-300'
 
-const components: Components = {
+const internalClass = (isTag: boolean) =>
+  isTag
+    ? 'text-[0.9em] font-medium text-indigo-600 hover:underline dark:text-indigo-400'
+    : `${linkBase} text-indigo-600 dark:text-indigo-400`
+
+// In a preview, internal links look the same but do not navigate, so an unsaved draft is not lost.
+const componentsFor = (inert: boolean): Components => ({
   a: ({ node: _node, href, className, children }) => {
     if (href?.startsWith('/')) {
       const isTag = className === 'hashtag'
+      if (inert) return <span className={internalClass(isTag)}>{children}</span>
       return (
-        <Link
-          to={href}
-          className={isTag ? 'text-[0.9em] font-medium text-indigo-600 hover:underline dark:text-indigo-400' : `${linkBase} text-indigo-600 dark:text-indigo-400`}
-        >
+        <Link to={href} className={internalClass(isTag)}>
           {children}
         </Link>
       )
@@ -69,16 +73,16 @@ const components: Components = {
       </a>
     )
   },
-}
+})
 
-export default function Markdown({ text, className = '' }: { text: string; className?: string }) {
+export default function Markdown({ text, className = '', inert = false }: { text: string; className?: string; inert?: boolean }) {
   return (
     <div className={`space-y-3 break-words leading-relaxed ${className}`}>
       <ReactMarkdown
         allowedElements={allowedElements}
         unwrapDisallowed
         remarkPlugins={[remarkBreaks, linkHashtags]}
-        components={components}
+        components={componentsFor(inert)}
       >
         {text}
       </ReactMarkdown>

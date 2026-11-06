@@ -3,11 +3,12 @@ import { Link } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { UserRound } from 'lucide-react'
 import { api } from '../api'
+import MarkdownField from '../components/MarkdownField'
 import VisibilityToggle from '../components/VisibilityToggle'
 import { ErrorState, Loading } from '../components/Status'
 import { useMe } from '../hooks'
 import type { User, Visibility } from '../types'
-import { btnPrimary, card, input, label } from '../ui'
+import { btnPrimary, card, label } from '../ui'
 
 const MAX_PROFILE = 2000
 
@@ -55,26 +56,19 @@ function SettingsForm({ user }: { user: User }) {
       </div>
 
       <form onSubmit={onSubmit} className={`${card} space-y-7 p-6 sm:p-8`}>
-        <div>
-          <label htmlFor="profile" className={label}>
-            Profile
-          </label>
-          <textarea
-            id="profile"
-            className={`${input} min-h-32 resize-y`}
-            rows={5}
-            maxLength={MAX_PROFILE}
-            placeholder="Tell other collectors about yourself…"
-            value={profile}
-            onChange={(e) => {
-              setProfile(e.target.value)
-              setSaved(false)
-            }}
-          />
-          <p className="mt-1.5 text-xs text-stone-500 dark:text-stone-400">
-            {profile.length} / {MAX_PROFILE}. Shown on your public profile.
-          </p>
-        </div>
+        <MarkdownField
+          id="profile"
+          labelText="Profile"
+          rows={5}
+          maxLength={MAX_PROFILE}
+          placeholder="Tell other collectors about yourself…"
+          value={profile}
+          onChange={(v) => {
+            setProfile(v)
+            setSaved(false)
+          }}
+          help={`${profile.length} / ${MAX_PROFILE}. Shown on your public profile. Bold, italic, links, lists and quotes also work.`}
+        />
 
         <div>
           <span className={label}>Default visibility</span>
