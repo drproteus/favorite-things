@@ -8,7 +8,8 @@ import { flattenFolders, rootFolder } from '../folders'
 import VisibilityToggle from '../components/VisibilityToggle'
 import { useCollections, useItem, useMe } from '../hooks'
 import { itemToInput, type Collection, type Item, type ItemInput, type Visibility } from '../types'
-import { btnPrimary, btnSecondary, card, input, label } from '../ui'
+import { Modal } from '../components/FolderDialogs'
+import { btnDanger, btnDangerMuted, btnPrimary, btnSecondary, card, input, label } from '../ui'
 
 const MAX_IMAGES = 20
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
@@ -148,6 +149,16 @@ function ItemForm({
   const deleteExisting = useMutation({
     mutationFn: (imageId: string) => api.deleteImage(existing!.id, imageId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['item', existing?.id] }),
+  })
+
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const remove = useMutation({
+    mutationFn: () => api.deleteItem(existing!.id),
+    onSuccess: () => {
+      qc.removeQueries({ queryKey: ['item', existing?.id] })
+      qc.invalidateQueries({ queryKey: ['items'] })
+      navigate('/collection')
+    },
   })
 
   // Saves the item, then uploads any queued photos. If an upload fails, the item keeps its id,
@@ -345,15 +356,50 @@ function ItemForm({
           </p>
         )}
 
-        <div className="flex flex-col-reverse gap-3 border-t border-stone-200 pt-6 sm:flex-row sm:justify-end dark:border-stone-800">
-          <button type="button" onClick={() => navigate(-1)} className={btnSecondary}>
-            Cancel
-          </button>
-          <button type="submit" disabled={save.isPending || form.title.trim() === ''} className={btnPrimary}>
-            {save.isPending ? 'Saving…' : existing ? 'Save changes' : 'Create item'}
-          </button>
+        <div className="flex flex-col gap-3 border-t border-stone-200 pt-6 sm:flex-row sm:items-center dark:border-stone-800">
+          {existing && (
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(true)}
+              disabled={save.isPending}
+              className={`${btnDangerMuted} sm:mr-auto`}
+            >
+              Delete
+            </button>
+          )}
+          <div className="flex flex-col-reverse gap-3 sm:ml-auto sm:flex-row">
+            <button type="button" onClick={() => navigate(-1)} className={btnSecondary}>
+              Cancel
+            </button>
+            <button type="submit" disabled={save.isPending || form.title.trim() === ''} className={btnPrimary}>
+              {save.isPending ? 'Saving…' : existing ? 'Save changes' : 'Create item'}
+            </button>
+          </div>
         </div>
       </form>
+
+      {confirmDelete && existing && (
+        <Modal title={`Delete “${existing.title}”?`} onClose={() => setConfirmDelete(false)}>
+          <div className="space-y-4">
+            <p className="text-sm text-stone-600 dark:text-stone-300">
+              This item and its photos will be permanently deleted. This can't be undone.
+            </p>
+            {remove.error && (
+              <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">
+                {remove.error.message}
+              </p>
+            )}
+            <div className="flex justify-end gap-3">
+              <button type="button" onClick={() => setConfirmDelete(false)} className={btnSecondary}>
+                Cancel
+              </button>
+              <button type="button" onClick={() => remove.mutate()} disabled={remove.isPending} className={btnDanger}>
+                {remove.isPending ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }

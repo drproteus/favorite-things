@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Check, Folder, Globe, ImageOff, Lock, Pencil, Share2, Trash2 } from 'lucide-react'
+import { ArrowLeft, Check, Folder, Globe, ImageOff, Lock, Pencil, Share2 } from 'lucide-react'
 import { api } from '../api'
 import Markdown from '../components/Markdown'
 import StarRating from '../components/StarRating'
@@ -9,7 +9,7 @@ import { ErrorState, Loading } from '../components/Status'
 import { pathTo } from '../folders'
 import { useCollections, useItem, useMe } from '../hooks'
 import { itemToInput, type Item, type Visibility } from '../types'
-import { btnDanger, btnGhost, btnPrimary, btnSecondary, card, chip } from '../ui'
+import { btnGhost, btnPrimary, btnSecondary, card, chip } from '../ui'
 
 export default function ItemDetailPage() {
   const { id = '' } = useParams()
@@ -21,7 +21,6 @@ export default function ItemDetailPage() {
 }
 
 function ItemView({ item }: { item: Item }) {
-  const navigate = useNavigate()
   const qc = useQueryClient()
   const { data: me } = useMe()
   const [active, setActive] = useState(0)
@@ -50,15 +49,6 @@ function ItemView({ item }: { item: Item }) {
     mutationFn: (visibility: Visibility) => api.updateItem(item.id, { ...itemToInput(item), visibility }),
     onSuccess: refresh,
   })
-  const remove = useMutation({
-    mutationFn: () => api.deleteItem(item.id),
-    onSuccess: () => {
-      qc.removeQueries({ queryKey: ['item', item.id] })
-      qc.invalidateQueries({ queryKey: ['items'] })
-      navigate('/collection')
-    },
-  })
-
   const share = async () => {
     try {
       await navigator.clipboard.writeText(window.location.href)
@@ -69,12 +59,8 @@ function ItemView({ item }: { item: Item }) {
     }
   }
 
-  const confirmDelete = () => {
-    if (window.confirm(`Delete "${item.title}"? This cannot be undone.`)) remove.mutate()
-  }
-
-  const busy = rate.isPending || clearRating.isPending || toggleVisibility.isPending || remove.isPending
-  const mutationError = [rate, clearRating, toggleVisibility, remove].find((m) => m.error)?.error
+  const busy = rate.isPending || clearRating.isPending || toggleVisibility.isPending
+  const mutationError = [rate, clearRating, toggleVisibility].find((m) => m.error)?.error
 
   return (
     <div className="space-y-6">
@@ -186,20 +172,6 @@ function ItemView({ item }: { item: Item }) {
             </div>
           )}
 
-          {item.tags.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {item.tags.map((t) => (
-                <Link
-                  key={t}
-                  to={`/explore?tag=${encodeURIComponent(t)}`}
-                  className={`${chip} transition hover:bg-indigo-100 dark:hover:bg-indigo-900`}
-                >
-                  #{t}
-                </Link>
-              ))}
-            </div>
-          )}
-
           {mutationError && (
             <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">
               {mutationError.message}
@@ -220,9 +192,6 @@ function ItemView({ item }: { item: Item }) {
                 >
                   {isPublic ? <Lock size={16} /> : <Globe size={16} />}
                   {isPublic ? 'Make private' : 'Make public'}
-                </button>
-                <button type="button" onClick={confirmDelete} disabled={busy} className={btnDanger}>
-                  <Trash2 size={16} /> Delete
                 </button>
               </>
             )}
