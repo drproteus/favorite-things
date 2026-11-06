@@ -12,17 +12,18 @@ import (
 )
 
 type Item struct {
-	ID          string    `json:"id"`
-	OwnerID     string    `json:"ownerId"`
-	OwnerName   string    `json:"ownerName"`
-	Title       string    `json:"title"`
-	Description string    `json:"description"`
-	Visibility  string    `json:"visibility"`
-	Tags        []string  `json:"tags"`
-	Images      []Image   `json:"images"`
-	Rating      *int      `json:"rating"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	ID           string    `json:"id"`
+	OwnerID      string    `json:"ownerId"`
+	OwnerName    string    `json:"ownerName"`
+	Title        string    `json:"title"`
+	Description  string    `json:"description"`
+	CollectionID string    `json:"collectionId"`
+	Visibility   string    `json:"visibility"`
+	Tags         []string  `json:"tags"`
+	Images       []Image   `json:"images"`
+	Rating       *int      `json:"rating"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
 }
 
 type Image struct {
@@ -33,12 +34,13 @@ type Image struct {
 }
 
 type Filter struct {
-	OwnerID    string
-	Query      string
-	Tag        string
-	Visibility string
-	Limit      int
-	Offset     int
+	OwnerID      string
+	CollectionID string
+	Query        string
+	Tag          string
+	Visibility   string
+	Limit        int
+	Offset       int
 }
 
 type Store struct {
@@ -51,10 +53,19 @@ func NewStore(pool *pgxpool.Pool) *Store {
 
 // itemSelect has no viewer-specific columns, so it is safe for any caller.
 const itemSelect = `
-SELECT i.id::text, i.owner_id::text, u.name, i.title, i.description, i.visibility,
-       i.tags, i.rating::int, i.created_at, i.updated_at
+SELECT i.id::text, i.owner_id::text, u.name, i.title, i.description, i.collection_id::text,
+       i.visibility, i.tags, i.rating::int, i.created_at, i.updated_at
 FROM items i
 JOIN users u ON u.id = i.owner_id`
+
+// publicClause is true when an item is public and no folder above it is private.
+const publicClause = `(i.visibility = 'public' AND NOT EXISTS (
+	WITH RECURSIVE up AS (
+		SELECT id, parent_id, visibility FROM collections WHERE id = i.collection_id
+		UNION ALL
+		SELECT c.id, c.parent_id, c.visibility FROM collections c JOIN up ON c.id = up.parent_id
+	)
+	SELECT 1 FROM up WHERE visibility = 'private'))`
 
 var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
@@ -70,7 +81,10 @@ func (s *Store) List(ctx context.Context, f Filter) ([]Item, error) {
 	if f.OwnerID != "" {
 		add("i.owner_id = $%d::uuid", f.OwnerID)
 	} else {
-		conds = append(conds, "i.visibility = 'public'")
+		conds = append(conds, publicClause)
+	}
+	if f.CollectionID != "" {
+		add("i.collection_id = $%d::uuid", f.CollectionID)
 	}
 	if f.Visibility != "" {
 		add("i.visibility = $%d", f.Visibility)
@@ -105,7 +119,7 @@ func (s *Store) List(ctx context.Context, f Filter) ([]Item, error) {
 // Get returns the item if it is public or owned by viewer; otherwise nil.
 func (s *Store) Get(ctx context.Context, viewer, id string) (*Item, error) {
 	row := s.pool.QueryRow(ctx,
-		itemSelect+` WHERE i.id = $2::uuid AND (i.visibility = 'public' OR i.owner_id = $1::uuid)`,
+		itemSelect+` WHERE i.id = $2::uuid AND (`+publicClause+` OR i.owner_id = $1::uuid)`,
 		nullable(viewer), id)
 	it, err := scanItem(row)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -124,18 +138,20 @@ func (s *Store) Get(ctx context.Context, viewer, id string) (*Item, error) {
 func (s *Store) Create(ctx context.Context, ownerID string, in Input) (string, error) {
 	var id string
 	err := s.pool.QueryRow(ctx, `
-		INSERT INTO items (owner_id, title, description, visibility, tags)
-		VALUES ($1::uuid, $2, $3, $4, $5::text[])
+		INSERT INTO items (owner_id, collection_id, title, description, visibility, tags)
+		VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::text[])
 		RETURNING id::text`,
-		ownerID, in.Title, in.Description, in.Visibility, in.Tags).Scan(&id)
+		ownerID, in.CollectionID, in.Title, in.Description, in.Visibility, in.Tags).Scan(&id)
 	return id, err
 }
 
+// Update changes the item. An empty CollectionID keeps the item in its current folder.
 func (s *Store) Update(ctx context.Context, ownerID, id string, in Input) (bool, error) {
 	tag, err := s.pool.Exec(ctx, `
-		UPDATE items SET title = $3, description = $4, visibility = $5, tags = $6::text[], updated_at = now()
+		UPDATE items SET title = $3, description = $4, visibility = $5, tags = $6::text[],
+		                 collection_id = COALESCE($7::uuid, collection_id), updated_at = now()
 		WHERE id = $2::uuid AND owner_id = $1::uuid`,
-		ownerID, id, in.Title, in.Description, in.Visibility, in.Tags)
+		ownerID, id, in.Title, in.Description, in.Visibility, in.Tags, nullable(in.CollectionID))
 	if err != nil {
 		return false, err
 	}
@@ -264,7 +280,7 @@ func (s *Store) loadImages(ctx context.Context, list []Item) error {
 
 func scanItem(row interface{ Scan(dest ...any) error }) (Item, error) {
 	var it Item
-	err := row.Scan(&it.ID, &it.OwnerID, &it.OwnerName, &it.Title, &it.Description,
+	err := row.Scan(&it.ID, &it.OwnerID, &it.OwnerName, &it.Title, &it.Description, &it.CollectionID,
 		&it.Visibility, &it.Tags, &it.Rating, &it.CreatedAt, &it.UpdatedAt)
 	if it.Tags == nil {
 		it.Tags = []string{}

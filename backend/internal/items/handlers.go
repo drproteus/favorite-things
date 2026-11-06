@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"favorite-things/backend/internal/auth"
+	"favorite-things/backend/internal/collections"
 	"favorite-things/backend/internal/httpx"
 	"favorite-things/backend/internal/storage"
 )
@@ -33,10 +34,11 @@ var allowedImageTypes = map[string]string{
 }
 
 type Input struct {
-	Title       string   `json:"title"`
-	Description string   `json:"description"`
-	Visibility  string   `json:"visibility"`
-	Tags        []string `json:"-"` // derived from #hashtags in Description
+	Title        string   `json:"title"`
+	Description  string   `json:"description"`
+	CollectionID string   `json:"collectionId"`
+	Visibility   string   `json:"visibility"`
+	Tags         []string `json:"-"` // derived from #hashtags in Description
 }
 
 func (in *Input) normalize() error {
@@ -66,12 +68,13 @@ func (in *Input) normalize() error {
 }
 
 type Handler struct {
-	store *Store
-	files *storage.Store
+	store   *Store
+	files   *storage.Store
+	folders *collections.Store
 }
 
-func NewHandler(store *Store, files *storage.Store) *Handler {
-	return &Handler{store: store, files: files}
+func NewHandler(store *Store, files *storage.Store, folders *collections.Store) *Handler {
+	return &Handler{store: store, files: files, folders: folders}
 }
 
 func (h *Handler) Routes(mux *http.ServeMux) {
@@ -104,6 +107,13 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		f.OwnerID = viewer
+		if raw := q.Get("collection"); raw != "" {
+			folder, ok := h.ownedFolder(w, r, viewer, raw)
+			if !ok {
+				return
+			}
+			f.CollectionID = folder
+		}
 	} else {
 		f.Visibility = ""
 	}
@@ -144,6 +154,11 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	folder, ok := h.resolveFolder(w, r, u.ID, in.CollectionID)
+	if !ok {
+		return
+	}
+	in.CollectionID = folder
 	id, err := h.store.Create(r.Context(), u.ID, in)
 	if err != nil {
 		httpx.Internal(w, err)
@@ -166,6 +181,13 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	if err := in.normalize(); err != nil {
 		httpx.Error(w, http.StatusBadRequest, err.Error())
 		return
+	}
+	if in.CollectionID != "" {
+		folder, ok := h.ownedFolder(w, r, u.ID, in.CollectionID)
+		if !ok {
+			return
+		}
+		in.CollectionID = folder
 	}
 	updated, err := h.store.Update(r.Context(), u.ID, id, in)
 	if err != nil {
@@ -373,6 +395,38 @@ func (h *Handler) ownedBy(w http.ResponseWriter, r *http.Request, id, userID str
 		return false
 	}
 	return true
+}
+
+// resolveFolder returns the folder to file a new item in: the requested one, or the root when none is given.
+func (h *Handler) resolveFolder(w http.ResponseWriter, r *http.Request, userID, raw string) (string, bool) {
+	if raw == "" {
+		root, err := h.folders.RootID(r.Context(), userID)
+		if err != nil {
+			httpx.Internal(w, err)
+			return "", false
+		}
+		return root, true
+	}
+	return h.ownedFolder(w, r, userID, raw)
+}
+
+// ownedFolder checks that raw names one of the user's folders and returns its ID.
+func (h *Handler) ownedFolder(w http.ResponseWriter, r *http.Request, userID, raw string) (string, bool) {
+	id, err := uuid.Parse(raw)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, "collectionId must be a folder ID")
+		return "", false
+	}
+	folder, err := h.folders.Get(r.Context(), userID, id.String())
+	if err != nil {
+		httpx.Internal(w, err)
+		return "", false
+	}
+	if folder == nil {
+		httpx.Error(w, http.StatusBadRequest, "folder not found")
+		return "", false
+	}
+	return folder.ID, true
 }
 
 func (h *Handler) sign(ctx context.Context, images []Image) error {
