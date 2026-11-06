@@ -34,8 +34,6 @@ favorite_things_letsencrypt_cert: "/etc/letsencrypt/live/{{ favorite_things_doma
 favorite_things_db_password: ""
 favorite_things_aws_access_key_id: ""
 favorite_things_aws_secret_access_key: ""
-favorite_things_aws_s3_bucket: ""
-favorite_things_aws_s3_region: "us-east-1"
 favorite_things_letsencrypt_email: ""
 favorite_things_gemini_api_key: ""
 favorite_things_github_client_id: ""

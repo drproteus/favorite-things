@@ -54,12 +54,16 @@ func Load() Config {
 		GitHubClientID:     os.Getenv("GITHUB_CLIENT_ID"),
 		GitHubClientSecret: os.Getenv("GITHUB_CLIENT_SECRET"),
 
-		S3Endpoint:       env("S3_ENDPOINT", "http://localhost:9000"),
+		// Storage targets MinIO in local development and AWS S3 in production.
+		// Credentials use the standard AWS names; when they are unset the MinIO
+		// defaults apply. S3_ENDPOINT may be set to an empty value to let the AWS
+		// SDK use its default regional endpoint.
+		S3Endpoint:       envAllowEmpty("S3_ENDPOINT", "http://localhost:9000"),
 		S3PublicEndpoint: os.Getenv("S3_PUBLIC_ENDPOINT"),
 		S3Region:         env("S3_REGION", "us-east-1"),
 		S3Bucket:         env("S3_BUCKET", "favorite-things"),
-		S3AccessKey:      env("S3_ACCESS_KEY", "minioadmin"),
-		S3SecretKey:      env("S3_SECRET_KEY", "minioadmin"),
+		S3AccessKey:      env("AWS_ACCESS_KEY_ID", env("S3_ACCESS_KEY", "minioadmin")),
+		S3SecretKey:      env("AWS_SECRET_ACCESS_KEY", env("S3_SECRET_KEY", "minioadmin")),
 		S3PathStyle:      envBool("S3_PATH_STYLE", true),
 
 		SuggestEnabled:    envBool("SUGGEST_ENABLED", false),
@@ -73,7 +77,16 @@ func Load() Config {
 }
 
 func env(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
+	if v, ok := os.LookupEnv(key); ok && v != "" {
+		return v
+	}
+	return fallback
+}
+
+// envAllowEmpty returns the value when the variable is set, even when its value
+// is empty. It falls back only when the variable is absent entirely.
+func envAllowEmpty(key, fallback string) string {
+	if v, ok := os.LookupEnv(key); ok {
 		return v
 	}
 	return fallback

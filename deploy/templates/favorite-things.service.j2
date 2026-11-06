@@ -1,9 +1,9 @@
 [Unit]
 Description=Favorite Things API
 Documentation=https://github.com/drproteus/favorite-things
-After=network-online.target postgresql.service minio.service
+After=network-online.target postgresql.service
 Wants=network-online.target
-Requires=postgresql.service minio.service
+Requires=postgresql.service
 
 [Service]
 Type=simple

@@ -74,7 +74,9 @@ Prerequisites: Go 1.26+, Node 24+, Docker.
    docker compose up -d postgres minio
    ```
 
-   Postgres is exposed on host port **5433** (5432 is commonly taken by a local install). MinIO's console is at http://localhost:9001 (login `minioadmin` / `minioadmin`). The app creates the S3 bucket on startup.
+   Postgres is exposed on host port **5433** (5432 is commonly taken by a local install). MinIO's console is at http://localhost:9001 (login `minioadmin` / `minioadmin`). The app creates the S3 bucket on startup. When `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` are unset, the API uses the MinIO defaults.
+
+   To use real AWS S3 locally instead, start only Postgres (`docker compose up -d postgres`), create the bucket yourself, and set `S3_ENDPOINT` (or leave it empty for the AWS default endpoint), `S3_BUCKET`, `S3_REGION`, `S3_PATH_STYLE=false`, and the AWS access key pair in `.env`.
 
 2. **Configure OAuth** (see below), then copy the env template to the repo root:
 
@@ -152,7 +154,7 @@ This starts Postgres, MinIO and the app at http://localhost:8080. Put your OAuth
 
 - Serve over HTTPS and set `COOKIE_SECURE=true`. Set `PUBLIC_URL` and `FRONTEND_URL` to your public origins. When the app is served by the Go binary, `FRONTEND_URL` is the same as `PUBLIC_URL`.
 - Images are served through presigned URLs that expire after one hour, so the bucket can stay private. Set `S3_PUBLIC_ENDPOINT` if the browser needs a different host from the one the API uses to reach storage.
-- For AWS S3, set `S3_ENDPOINT` to empty (or your region's endpoint), `S3_PATH_STYLE=false`, and create the bucket yourself. `EnsureBucket` only creates buckets in `us-east-1`-style setups.
+- For AWS S3, set `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, set `S3_ENDPOINT` to empty (or your region's endpoint), set `S3_PATH_STYLE=false`, and create the bucket yourself. `EnsureBucket` only creates buckets in `us-east-1`-style setups. The local MinIO defaults only apply when the AWS credentials are unset.
 - Migrations run automatically at startup and are tracked in `schema_migrations`.
 
 ## API overview

@@ -125,15 +125,23 @@ The API reads these from `favorite-things.env`:
 
 ```
 DATABASE_URL              PostgreSQL connection string (built from secrets)
+S3_ENDPOINT               Regional S3 endpoint (https://s3.<region>.amazonaws.com)
+S3_BUCKET                 S3 bucket name for photos (must already exist)
+S3_REGION                 AWS region (e.g. us-east-1)
+S3_PATH_STYLE             "false" for AWS S3
 AWS_ACCESS_KEY_ID         AWS IAM user access key
 AWS_SECRET_ACCESS_KEY     AWS IAM user secret key
-AWS_S3_BUCKET             S3 bucket name for photos
-AWS_S3_REGION             AWS region (e.g. us-east-1)
+ADDR                      Listen address (127.0.0.1:8080)
+PUBLIC_URL                Public HTTPS origin (https://things.skinet.org)
+FRONTEND_URL              Post-login redirect origin (https://things.skinet.org)
+COOKIE_SECURE             "true" because the site is served over HTTPS
 GEMINI_API_KEY            Google Gemini API key (optional, for photo suggestions)
 SUGGEST_ENABLED           "true" to enable photo suggestions (requires GEMINI_API_KEY)
 GITHUB_CLIENT_ID          GitHub OAuth client ID
 GITHUB_CLIENT_SECRET      GitHub OAuth client secret
 GOOGLE_CLIENT_ID          Google OAuth client ID
 GOOGLE_CLIENT_SECRET      Google OAuth client secret
-PUBLIC_URL                Public HTTPS URL for the API (https://<domain>/api)
 ```
+
+The API reads the standard AWS access key variables, matching local development.
+Local MinIO defaults only apply when those credentials are unset.
