@@ -63,6 +63,11 @@ export interface Item {
   updatedAt: string
 }
 
+export interface PopularTag {
+  tag: string
+  count: number
+}
+
 export interface Suggestion {
   title: string
   description: string

@@ -6,6 +6,7 @@ import type {
   ItemFilter,
   ItemImage,
   ItemInput,
+  PopularTag,
   PublicUser,
   Suggestion,
   User,
@@ -88,6 +89,7 @@ export const api = {
   clearRating: (itemId: string) => request<void>(`/items/${itemId}/rating`, { method: 'DELETE' }),
 
   tags: () => request<string[]>('/tags'),
+  popularTags: (limit = 12) => request<PopularTag[]>(`/tags/popular?limit=${limit}`),
 
   collections: () => request<Collection[]>('/collections'),
   createCollection: (input: CollectionInput) =>

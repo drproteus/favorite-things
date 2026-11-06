@@ -188,9 +188,13 @@ function ItemView({ item }: { item: Item }) {
           {item.tags.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {item.tags.map((t) => (
-                <span key={t} className={chip}>
+                <Link
+                  key={t}
+                  to={`/explore?tag=${encodeURIComponent(t)}`}
+                  className={`${chip} transition hover:bg-indigo-100 dark:hover:bg-indigo-900`}
+                >
                   #{t}
-                </span>
+                </Link>
               ))}
             </div>
           )}

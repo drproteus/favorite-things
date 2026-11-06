@@ -345,3 +345,25 @@ func nullable(s string) any {
 	}
 	return s
 }
+
+// TagCount is a hashtag and how many public items use it.
+type TagCount struct {
+	Tag   string `json:"tag"`
+	Count int    `json:"count"`
+}
+
+// PopularTags returns the hashtags used most often on public items, most used first.
+func (s *Store) PopularTags(ctx context.Context, limit int) ([]TagCount, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT tag, count(*)::int FROM items i, unnest(i.tags) AS tag
+		WHERE `+publicClause+`
+		GROUP BY tag ORDER BY count(*) DESC, tag LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (TagCount, error) {
+		var tc TagCount
+		err := r.Scan(&tc.Tag, &tc.Count)
+		return tc, err
+	})
+}

@@ -89,6 +89,7 @@ func (h *Handler) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/items/{id}/rating", auth.RequireUser(h.clearRating))
 	mux.HandleFunc("GET /api/tags", auth.RequireUser(h.tags))
 	mux.HandleFunc("GET /api/users/{id}/items", h.userItems)
+	mux.HandleFunc("GET /api/tags/popular", h.popularTags)
 	mux.HandleFunc("POST /api/items/bulk/move", auth.RequireUser(h.bulkMove))
 	mux.HandleFunc("POST /api/items/bulk/delete", auth.RequireUser(h.bulkDelete))
 	mux.HandleFunc("POST /api/items/bulk/visibility", auth.RequireUser(h.bulkVisibility))
@@ -207,6 +208,19 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 			httpx.Internal(w, err)
 			return
 		}
+	}
+	httpx.JSON(w, http.StatusOK, list)
+}
+
+// popularTags lists the most-used hashtags on public items. Anyone can read it.
+func (h *Handler) popularTags(w http.ResponseWriter, r *http.Request) {
+	list, err := h.store.PopularTags(r.Context(), queryInt(r.URL.Query().Get("limit"), 12, 1, 50))
+	if err != nil {
+		httpx.Internal(w, err)
+		return
+	}
+	if list == nil {
+		list = []TagCount{}
 	}
 	httpx.JSON(w, http.StatusOK, list)
 }

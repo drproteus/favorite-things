@@ -66,6 +66,14 @@ export function useCollections(enabled = true) {
   })
 }
 
+export function usePopularTags() {
+  return useQuery({
+    queryKey: ['popular-tags'],
+    queryFn: () => api.popularTags(),
+    staleTime: 5 * 60_000,
+  })
+}
+
 export function useTags(enabled = true) {
   return useQuery({
     queryKey: ['tags'],

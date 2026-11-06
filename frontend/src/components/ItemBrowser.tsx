@@ -1,9 +1,9 @@
 import { useDeferredValue, useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Compass, Plus, Search } from 'lucide-react'
 import { useItems, useTags } from '../hooks'
 import type { ItemFilter, Visibility } from '../types'
-import { btnPrimary, input } from '../ui'
+import { btnGhost, btnPrimary, chip, input } from '../ui'
 import ItemCard from './ItemCard'
 import { EmptyState, ErrorState, Loading } from './Status'
 
@@ -38,7 +38,14 @@ export default function ItemBrowser({
 }: Props) {
   const mine = scope === 'mine'
   const [q, setQ] = useState('')
-  const [tag, setTag] = useState('')
+  const [params, setParams] = useSearchParams()
+  const [mineTag, setMineTag] = useState('')
+  // On Explore the tag lives in the URL, so a tag link can open the page already filtered.
+  const tag = mine ? mineTag : (params.get('tag') ?? '')
+  const setTag = (value: string) => {
+    if (mine) setMineTag(value)
+    else setParams(value ? { tag: value } : {})
+  }
   const [visibility, setVisibility] = useState<Visibility | ''>('')
   const deferredQ = useDeferredValue(q)
 
@@ -103,6 +110,15 @@ export default function ItemBrowser({
           </>
         )}
       </div>
+
+      {!mine && tag && (
+        <div className="flex items-center gap-2 text-sm text-stone-600 dark:text-stone-300">
+          Showing <span className={chip}>#{tag}</span>
+          <button type="button" onClick={() => setTag('')} className={btnGhost}>
+            Clear
+          </button>
+        </div>
+      )}
 
       {folders}
 

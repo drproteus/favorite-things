@@ -17,7 +17,7 @@ A personal inventory and collection app. Catalog anything you collect (consoles,
 - Profile page for each user at `/users/:id`, with a profile text and their public items. Anyone can see it
 - Settings page: profile text, and the default visibility for new items and folders (public by default)
 - Public or private visibility, toggled from the item page or the edit form
-- Explore page for public items, with search and tag filters
+- Explore page for public items, with search and tag filters, and the most-used public tags at the top. Tags on item pages link to Explore filtered by that tag
 - Drag-and-drop or browse to add photos
 - Tags are #hashtags in the description, Twitter-style, so they need no separate management
 - Share public items with a copy-link button
