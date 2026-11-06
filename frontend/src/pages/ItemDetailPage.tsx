@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Check, Folder, Globe, ImageOff, Lock, Pencil, Share2, Trash2 } from 'lucide-react'
 import { api } from '../api'
+import Markdown from '../components/Markdown'
 import StarRating from '../components/StarRating'
 import { ErrorState, Loading } from '../components/Status'
 import { pathTo } from '../folders'
@@ -181,7 +182,7 @@ function ItemView({ item }: { item: Item }) {
           {item.description && (
             <div className={`${card} p-5`}>
               <h2 className="mb-2 text-sm font-semibold text-stone-500 dark:text-stone-400">Description</h2>
-              <p className="whitespace-pre-wrap leading-relaxed text-stone-800 dark:text-stone-200">{item.description}</p>
+              <Markdown text={item.description} className="text-stone-800 dark:text-stone-200" />
             </div>
           )}
 

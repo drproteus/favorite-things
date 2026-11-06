@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router-dom'
 import { Compass, Settings } from 'lucide-react'
 import ItemCard from '../components/ItemCard'
+import Markdown from '../components/Markdown'
 import { EmptyState, ErrorState, Loading } from '../components/Status'
 import { useMe, usePublicUser, useUserItems } from '../hooks'
 import { btnSecondary } from '../ui'
@@ -30,7 +31,7 @@ export default function ProfilePage() {
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{user.name}</h1>
           {user.profile ? (
-            <p className="mt-2 whitespace-pre-wrap leading-relaxed text-stone-700 dark:text-stone-300">{user.profile}</p>
+            <Markdown text={user.profile} className="mt-2 text-stone-700 dark:text-stone-300" />
           ) : (
             <p className="mt-2 text-sm text-stone-500 dark:text-stone-400">
               {isMe ? 'Add a profile so other collectors know who you are.' : 'No profile yet.'}

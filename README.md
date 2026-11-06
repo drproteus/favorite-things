@@ -15,6 +15,7 @@ A personal inventory and collection app. Catalog anything you collect (consoles,
 - Select mode in My collection: pick items and folders, then move them, change their visibility, or delete them together
 - Changing a folder's visibility can also apply to everything inside it
 - Profile page for each user at `/users/:id`, with a profile text and their public items. Anyone can see it
+- Descriptions and profiles support a markdown subset: bold, italic, links, lists, quotes and inline code. Raw HTML and headings are not rendered, and #hashtags link to Explore
 - Settings page: profile text, and the default visibility for new items and folders (public by default)
 - Public or private visibility, toggled from the item page or the edit form
 - Explore page for public items, with search and tag filters, and the most-used public tags at the top. Tags on item pages link to Explore filtered by that tag
