@@ -24,6 +24,7 @@ import (
 	"favorite-things/backend/internal/items"
 	"favorite-things/backend/internal/server"
 	"favorite-things/backend/internal/storage"
+	"favorite-things/backend/internal/suggest"
 )
 
 // These tests run the whole HTTP stack against a real database. They need TEST_DATABASE_URL, for example
@@ -45,6 +46,11 @@ type account struct {
 }
 
 func newFixture(t *testing.T) *fixture {
+	t.Helper()
+	return newFixtureWith(t, suggest.NewHandler(false, nil, 0))
+}
+
+func newFixtureWith(t *testing.T, suggestH *suggest.Handler) *fixture {
 	t.Helper()
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
@@ -69,6 +75,7 @@ func newFixture(t *testing.T) *fixture {
 		auth.NewHandler(authSvc, cfg),
 		items.NewHandler(items.NewStore(pool), files, collections.NewStore(pool)),
 		collections.NewHandler(collections.NewStore(pool), files),
+		suggestH,
 	)
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)

@@ -19,6 +19,7 @@ import (
 	"favorite-things/backend/internal/items"
 	"favorite-things/backend/internal/server"
 	"favorite-things/backend/internal/storage"
+	"favorite-things/backend/internal/suggest"
 )
 
 func main() {
@@ -53,6 +54,17 @@ func run() error {
 		return err
 	}
 
+	var model suggest.Model
+	if cfg.SuggestEnabled {
+		bedrock, err := suggest.NewBedrock(ctx, cfg.BedrockRegion, cfg.BedrockModelID)
+		if err != nil {
+			return err
+		}
+		model = bedrock
+		slog.Info("photo suggestions enabled", "model", cfg.BedrockModelID, "region", cfg.BedrockRegion)
+	}
+	suggestH := suggest.NewHandler(cfg.SuggestEnabled, model, cfg.SuggestDailyLimit)
+
 	authSvc := auth.NewService(pool, cfg.SessionTTL, cfg.CookieSecure)
 	handler := server.New(
 		cfg,
@@ -60,6 +72,7 @@ func run() error {
 		auth.NewHandler(authSvc, cfg),
 		items.NewHandler(items.NewStore(pool), files, collections.NewStore(pool)),
 		collections.NewHandler(collections.NewStore(pool), files),
+		suggestH,
 	)
 
 	srv := &http.Server{

@@ -27,6 +27,13 @@ type Config struct {
 	S3AccessKey      string
 	S3SecretKey      string
 	S3PathStyle      bool
+
+	// Photo suggestions use Amazon Bedrock. Credentials come from the standard AWS chain:
+	// AWS_PROFILE, AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY, or an IAM role when deployed.
+	SuggestEnabled    bool
+	BedrockRegion     string
+	BedrockModelID    string
+	SuggestDailyLimit int
 }
 
 func Load() Config {
@@ -51,6 +58,11 @@ func Load() Config {
 		S3AccessKey:      env("S3_ACCESS_KEY", "minioadmin"),
 		S3SecretKey:      env("S3_SECRET_KEY", "minioadmin"),
 		S3PathStyle:      envBool("S3_PATH_STYLE", true),
+
+		SuggestEnabled:    envBool("SUGGEST_ENABLED", false),
+		BedrockRegion:     env("BEDROCK_REGION", "us-east-1"),
+		BedrockModelID:    env("BEDROCK_MODEL_ID", "amazon.nova-lite-v1:0"),
+		SuggestDailyLimit: envInt("SUGGEST_DAILY_LIMIT", 50),
 	}
 }
 
@@ -71,6 +83,14 @@ func envBool(key string, fallback bool) bool {
 
 func envDuration(key string, fallback time.Duration) time.Duration {
 	v, err := time.ParseDuration(os.Getenv(key))
+	if err != nil {
+		return fallback
+	}
+	return v
+}
+
+func envInt(key string, fallback int) int {
+	v, err := strconv.Atoi(os.Getenv(key))
 	if err != nil {
 		return fallback
 	}
