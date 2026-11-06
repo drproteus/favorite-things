@@ -3,9 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Globe, ImageOff, Lock, Upload, X } from 'lucide-react'
 import { api } from '../api'
-import TagInput from '../components/TagInput'
 import { ErrorState, Loading } from '../components/Status'
-import { useCatalog, useItem, useTags } from '../hooks'
+import { useCatalog, useItem } from '../hooks'
 import { itemToInput, type Item, type ItemInput, type Visibility } from '../types'
 import { btnPrimary, btnSecondary, card, input, label } from '../ui'
 
@@ -31,14 +30,10 @@ export default function ItemFormPage() {
 function ItemForm({ existing }: { existing?: Item }) {
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const userTags = useTags()
   const catalog = useCatalog()
-  const tagSuggestions = [...new Set([...(catalog.data?.tags.map((t) => t.name) ?? []), ...(userTags.data ?? [])])]
 
   const [form, setForm] = useState<ItemInput>(() =>
-    existing
-      ? itemToInput(existing)
-      : { title: '', description: '', categoryId: 0, visibility: 'private', tags: [] },
+    existing ? itemToInput(existing) : { title: '', description: '', categoryId: 0, visibility: 'private' },
   )
   const [itemId, setItemId] = useState<string | undefined>(existing?.id)
   const [pending, setPending] = useState<PendingFile[]>([])
@@ -187,16 +182,13 @@ function ItemForm({ existing }: { existing?: Item }) {
             className={`${input} min-h-32 resize-y`}
             rows={5}
             maxLength={10000}
-            placeholder="Condition, where you got it, why you love it…"
+            placeholder="Condition, where you got it, why you love it… #vintage #mint"
             value={form.description}
             onChange={(e) => update('description', e.target.value)}
           />
-        </div>
-
-        <div>
-          <span className={label}>Tags</span>
-          <TagInput value={form.tags} onChange={(t) => update('tags', t)} suggestions={tagSuggestions} />
-          <p className="mt-1.5 text-xs text-stone-500 dark:text-stone-400">Press Enter or comma to add a tag.</p>
+          <p className="mt-1.5 text-xs text-stone-500 dark:text-stone-400">
+            Add tags as #hashtags anywhere in the description.
+          </p>
         </div>
 
         <div

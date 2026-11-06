@@ -17,16 +17,15 @@ export default function AdminPage() {
           <Shield size={26} className="text-indigo-600 dark:text-indigo-400" /> Admin
         </h1>
         <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
-          Manage the site-wide categories and tags that members pick from. Changes don't alter existing items.
+          Manage the site-wide categories that members pick from. Changes don't alter existing items.
         </p>
       </div>
 
       {catalog.isPending && <Loading />}
       {catalog.isError && <ErrorState message={catalog.error.message} />}
       {catalog.data && (
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="max-w-2xl">
           <TermManager kind="categories" title="Categories" terms={catalog.data.categories} />
-          <TermManager kind="tags" title="Tags" terms={catalog.data.tags} />
         </div>
       )}
     </div>

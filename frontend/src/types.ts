@@ -15,10 +15,9 @@ export interface Term {
 
 export interface Catalog {
   categories: Term[]
-  tags: Term[]
 }
 
-export type TermKind = 'categories' | 'tags'
+export type TermKind = 'categories'
 
 export interface ItemImage {
   id: string
@@ -47,7 +46,6 @@ export interface ItemInput {
   description: string
   categoryId: number
   visibility: Visibility
-  tags: string[]
 }
 
 export interface ItemFilter {
@@ -71,6 +69,5 @@ export function itemToInput(item: Item): ItemInput {
     description: item.description,
     categoryId: item.categoryId,
     visibility: item.visibility,
-    tags: item.tags,
   }
 }

@@ -8,12 +8,13 @@ A personal inventory and collection app. Catalog anything you collect (consoles,
 ## Features
 
 - Sign in with Google or GitHub (no passwords)
-- Create, edit and delete items with a title, description, category, tags and photos (0 to 20 per item)
+- Create, edit and delete items with a title, description, category, #hashtag tags and photos (0 to 20 per item)
 - Public or private visibility, toggled from the item page or the edit form
 - Explore page for public items, grouped by category in the admin's order, with a random photo per category
 - Drag-and-drop or browse to add photos
-- Site-wide categories and tags, pre-loaded and suggested while editing items
-- Admins can add, rename and delete site categories and tags at `/admin`
+- Site-wide categories, pre-loaded and picked from a dropdown while editing items
+- Tags are #hashtags in the description, Twitter-style, so they need no separate management
+- Admins can add, rename, delete and reorder site categories at `/admin`
 - Share public items with a copy-link button
 - 1 to 5 star rating on each item, set by its owner and shown to anyone who can see the item
 - Responsive layout with light and dark mode
@@ -27,7 +28,7 @@ backend/            Go API
     auth/           OAuth login, server-side sessions, middleware
     config/         environment configuration
     database/       pgx pool and embedded SQL migrations
-    items/          items, tags, images, ratings: store and HTTP handlers
+    items/          items, hashtags, images, ratings: store and HTTP handlers
     server/         router and SPA fallback
     storage/        S3/MinIO client and presigned URLs
     httpx/          JSON helpers
@@ -86,7 +87,7 @@ go run ./cmd/admin revoke you@example.com     # revoke admin
 go run ./cmd/admin grant  <user-id>           # or by user ID (use this if the account has no email)
 ```
 
-Admins see an **Admin** link in the header. Changing categories or tags only affects the suggestions offered to members. Existing items keep the values they already have.
+Admins see an **Admin** link in the header. Changing categories only affects the choices offered to members. Existing items keep the category they already have.
 
 ## OAuth setup
 
@@ -132,13 +133,13 @@ This starts Postgres, MinIO and the app at http://localhost:8080. Put your OAuth
 | DELETE | `/api/items/{id}/images/{imageId}` | owner | Remove photo |
 | PUT | `/api/items/{id}/rating` | owner | Set the rating `{ "rating": 1-5 }` |
 | DELETE | `/api/items/{id}/rating` | owner | Clear the rating |
-| GET | `/api/tags` | yes | Your tags (for autocomplete) |
+| GET | `/api/tags` | yes | Hashtags used on your items (for the filter) |
 | GET | `/api/explore` | | Public items grouped by category, with a random cover photo |
-| GET | `/api/catalog` | | Site categories and tags, in display order |
-| POST | `/api/admin/{categories\|tags}` | admin | Add `{ "name": "..." }` |
-| PUT | `/api/admin/{categories\|tags}/{id}` | admin | Rename `{ "name": "..." }` |
-| PUT | `/api/admin/{categories\|tags}/order` | admin | Reorder `{ "ids": [...] }` |
-| DELETE | `/api/admin/{categories\|tags}/{id}` | admin | Delete (categories in use by items are refused) |
+| GET | `/api/catalog` | | Site categories, in display order |
+| POST | `/api/admin/categories` | admin | Add `{ "name": "..." }` |
+| PUT | `/api/admin/categories/{id}` | admin | Rename `{ "name": "..." }` |
+| PUT | `/api/admin/categories/order` | admin | Reorder `{ "ids": [...] }` |
+| DELETE | `/api/admin/categories/{id}` | admin | Delete (categories in use by items are refused) |
 
 ## Tests and checks
 
