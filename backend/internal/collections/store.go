@@ -46,6 +46,13 @@ func NewStore(pool *pgxpool.Pool) *Store {
 	return &Store{pool: pool}
 }
 
+// queryer is implemented by both *pgxpool.Pool and pgx.Tx, so lookups can see changes made earlier in a transaction.
+type queryer interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
 // RootID returns the user's root folder, creating it the first time it is needed.
 func (s *Store) RootID(ctx context.Context, userID string) (string, error) {
 	if _, err := s.pool.Exec(ctx, `
@@ -74,7 +81,11 @@ func (s *Store) List(ctx context.Context, userID string) ([]Collection, error) {
 
 // Get returns the user's folder, or nil if it doesn't exist or belongs to someone else.
 func (s *Store) Get(ctx context.Context, userID, id string) (*Collection, error) {
-	row := s.pool.QueryRow(ctx, `
+	return get(ctx, s.pool, userID, id)
+}
+
+func get(ctx context.Context, q queryer, userID, id string) (*Collection, error) {
+	row := q.QueryRow(ctx, `
 		SELECT id::text, parent_id::text, name, visibility, created_at, updated_at
 		FROM collections WHERE id = $2::uuid AND owner_id = $1::uuid`, userID, id)
 	c, err := scanCollection(row)
@@ -105,7 +116,7 @@ func (s *Store) Update(ctx context.Context, userID, id, name, visibility, parent
 	}
 	defer tx.Rollback(ctx)
 
-	current, err := s.Get(ctx, userID, id)
+	current, err := get(ctx, tx, userID, id)
 	if err != nil {
 		return Collection{}, err
 	}
@@ -140,7 +151,74 @@ func (s *Store) Delete(ctx context.Context, userID, id string, mode DeleteMode) 
 	}
 	defer tx.Rollback(ctx)
 
-	current, err := s.Get(ctx, userID, id)
+	keys, err := deleteInTx(ctx, tx, userID, id, mode)
+	if err != nil {
+		return nil, err
+	}
+	return keys, tx.Commit(ctx)
+}
+
+// MoveMany moves several folders under parentID in one transaction. If any move fails, none apply.
+func (s *Store) MoveMany(ctx context.Context, userID string, ids []string, parentID string) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	for _, id := range ids {
+		if err := moveInTx(ctx, tx, userID, id, parentID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+// DeleteMany deletes several folders in one transaction and returns the storage keys of their photos.
+// A folder already removed along with a selected parent is skipped.
+func (s *Store) DeleteMany(ctx context.Context, userID string, ids []string, mode DeleteMode) ([]string, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	var keys []string
+	for _, id := range ids {
+		removed, err := deleteInTx(ctx, tx, userID, id, mode)
+		if errors.Is(err, ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		keys = append(keys, removed...)
+	}
+	return keys, tx.Commit(ctx)
+}
+
+func moveInTx(ctx context.Context, tx pgx.Tx, userID, id, parentID string) error {
+	current, err := get(ctx, tx, userID, id)
+	if err != nil {
+		return err
+	}
+	if current == nil {
+		return ErrNotFound
+	}
+	if current.ParentID == nil {
+		return ErrRoot
+	}
+	if err := checkParent(ctx, tx, userID, id, parentID); err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `
+		UPDATE collections SET parent_id = $3::uuid, updated_at = now()
+		WHERE id = $2::uuid AND owner_id = $1::uuid`, userID, id, parentID)
+	return mapErr(err)
+}
+
+func deleteInTx(ctx context.Context, tx pgx.Tx, userID, id string, mode DeleteMode) ([]string, error) {
+	current, err := get(ctx, tx, userID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -152,42 +230,37 @@ func (s *Store) Delete(ctx context.Context, userID, id string, mode DeleteMode) 
 	}
 	parentID := *current.ParentID
 
-	var keys []string
-	switch mode {
-	case MoveContents:
+	if mode == MoveContents {
 		if _, err := tx.Exec(ctx, `UPDATE items SET collection_id = $2::uuid WHERE collection_id = $1::uuid`, id, parentID); err != nil {
 			return nil, err
 		}
 		if _, err := tx.Exec(ctx, `UPDATE collections SET parent_id = $2::uuid WHERE parent_id = $1::uuid`, id, parentID); err != nil {
 			return nil, mapErr(err)
 		}
-	default:
-		rows, err := tx.Query(ctx, subtreeCTE+`
-			SELECT ii.s3_key FROM item_images ii
-			JOIN items i ON i.id = ii.item_id
-			WHERE i.collection_id IN (SELECT id FROM subtree)`, id)
-		if err != nil {
-			return nil, err
-		}
-		if keys, err = pgx.CollectRows(rows, pgx.RowTo[string]); err != nil {
-			return nil, err
-		}
-		if _, err := tx.Exec(ctx, subtreeCTE+`
-			DELETE FROM items WHERE collection_id IN (SELECT id FROM subtree)`, id); err != nil {
-			return nil, err
-		}
-		if _, err := tx.Exec(ctx, subtreeCTE+`
-			DELETE FROM collections WHERE id IN (SELECT id FROM subtree)`, id); err != nil {
-			return nil, err
-		}
+		_, err := tx.Exec(ctx, `DELETE FROM collections WHERE id = $1::uuid`, id)
+		return nil, err
 	}
 
-	if mode == MoveContents {
-		if _, err := tx.Exec(ctx, `DELETE FROM collections WHERE id = $1::uuid`, id); err != nil {
-			return nil, err
-		}
+	rows, err := tx.Query(ctx, subtreeCTE+`
+		SELECT ii.s3_key FROM item_images ii
+		JOIN items i ON i.id = ii.item_id
+		WHERE i.collection_id IN (SELECT id FROM subtree)`, id)
+	if err != nil {
+		return nil, err
 	}
-	return keys, tx.Commit(ctx)
+	keys, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(ctx, subtreeCTE+`
+		DELETE FROM items WHERE collection_id IN (SELECT id FROM subtree)`, id); err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(ctx, subtreeCTE+`
+		DELETE FROM collections WHERE id IN (SELECT id FROM subtree)`, id); err != nil {
+		return nil, err
+	}
+	return keys, nil
 }
 
 // subtreeCTE names the folder given as $1 and every folder beneath it.

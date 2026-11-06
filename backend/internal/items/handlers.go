@@ -88,6 +88,55 @@ func (h *Handler) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/items/{id}/rating", auth.RequireUser(h.setRating))
 	mux.HandleFunc("DELETE /api/items/{id}/rating", auth.RequireUser(h.clearRating))
 	mux.HandleFunc("GET /api/tags", auth.RequireUser(h.tags))
+	mux.HandleFunc("POST /api/items/bulk/move", auth.RequireUser(h.bulkMove))
+	mux.HandleFunc("POST /api/items/bulk/delete", auth.RequireUser(h.bulkDelete))
+}
+
+func (h *Handler) bulkMove(w http.ResponseWriter, r *http.Request) {
+	u := auth.UserFrom(r.Context())
+	var in struct {
+		IDs          []string `json:"ids"`
+		CollectionID string   `json:"collectionId"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		httpx.Error(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	ids, ok := httpx.UUIDList(w, in.IDs)
+	if !ok {
+		return
+	}
+	folder, ok := h.ownedFolder(w, r, u.ID, in.CollectionID)
+	if !ok {
+		return
+	}
+	if _, err := h.store.MoveMany(r.Context(), u.ID, ids, folder); err != nil {
+		httpx.Internal(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) bulkDelete(w http.ResponseWriter, r *http.Request) {
+	u := auth.UserFrom(r.Context())
+	var in struct {
+		IDs []string `json:"ids"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		httpx.Error(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	ids, ok := httpx.UUIDList(w, in.IDs)
+	if !ok {
+		return
+	}
+	keys, err := h.store.DeleteMany(r.Context(), u.ID, ids)
+	if err != nil {
+		httpx.Internal(w, err)
+		return
+	}
+	h.removeObjects(r.Context(), keys)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {

@@ -234,6 +234,42 @@ func (s *Store) SetRating(ctx context.Context, ownerID, itemID string, rating *i
 	return tag.RowsAffected() > 0, nil
 }
 
+// MoveMany files the owner's items in folderID and returns how many were moved.
+func (s *Store) MoveMany(ctx context.Context, ownerID string, ids []string, folderID string) (int64, error) {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE items SET collection_id = $3::uuid, updated_at = now()
+		WHERE owner_id = $1::uuid AND id = ANY($2::uuid[])`, ownerID, ids, folderID)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
+// DeleteMany deletes the owner's items and returns the storage keys of their photos.
+func (s *Store) DeleteMany(ctx context.Context, ownerID string, ids []string) ([]string, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	rows, err := tx.Query(ctx, `
+		SELECT ii.s3_key FROM item_images ii
+		JOIN items i ON i.id = ii.item_id
+		WHERE i.owner_id = $1::uuid AND i.id = ANY($2::uuid[])`, ownerID, ids)
+	if err != nil {
+		return nil, err
+	}
+	keys, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM items WHERE owner_id = $1::uuid AND id = ANY($2::uuid[])`, ownerID, ids); err != nil {
+		return nil, err
+	}
+	return keys, tx.Commit(ctx)
+}
+
 // ListTags returns every hashtag the user has used on their items, for filtering.
 func (s *Store) ListTags(ctx context.Context, userID string) ([]string, error) {
 	rows, err := s.pool.Query(ctx, `

@@ -1,6 +1,7 @@
 package collections
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -30,6 +31,79 @@ func (h *Handler) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/collections", auth.RequireUser(h.create))
 	mux.HandleFunc("PUT /api/collections/{id}", auth.RequireUser(h.update))
 	mux.HandleFunc("DELETE /api/collections/{id}", auth.RequireUser(h.delete))
+	mux.HandleFunc("POST /api/collections/bulk/move", auth.RequireUser(h.bulkMove))
+	mux.HandleFunc("POST /api/collections/bulk/delete", auth.RequireUser(h.bulkDelete))
+}
+
+func (h *Handler) bulkMove(w http.ResponseWriter, r *http.Request) {
+	u := auth.UserFrom(r.Context())
+	var in struct {
+		IDs      []string `json:"ids"`
+		ParentID string   `json:"parentId"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		httpx.Error(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	ids, ok := httpx.UUIDList(w, in.IDs)
+	if !ok {
+		return
+	}
+	parentID, ok := parseParent(w, in.ParentID)
+	if !ok {
+		return
+	}
+	if err := h.store.MoveMany(r.Context(), u.ID, ids, parentID); err != nil {
+		h.writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) bulkDelete(w http.ResponseWriter, r *http.Request) {
+	u := auth.UserFrom(r.Context())
+	var in struct {
+		IDs []string `json:"ids"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		httpx.Error(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	ids, ok := httpx.UUIDList(w, in.IDs)
+	if !ok {
+		return
+	}
+	mode, ok := deleteMode(w, r)
+	if !ok {
+		return
+	}
+	keys, err := h.store.DeleteMany(r.Context(), u.ID, ids, mode)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	h.removeObjects(r.Context(), keys)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func deleteMode(w http.ResponseWriter, r *http.Request) (DeleteMode, bool) {
+	switch mode := DeleteMode(r.URL.Query().Get("contents")); mode {
+	case "":
+		return DeleteContents, true
+	case DeleteContents, MoveContents:
+		return mode, true
+	default:
+		httpx.Error(w, http.StatusBadRequest, "contents must be delete or move")
+		return "", false
+	}
+}
+
+func (h *Handler) removeObjects(ctx context.Context, keys []string) {
+	for _, key := range keys {
+		if err := h.files.Delete(ctx, key); err != nil {
+			slog.Warn("delete object", "key", key, "error", err)
+		}
+	}
 }
 
 type body struct {
@@ -127,13 +201,8 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	mode := DeleteMode(r.URL.Query().Get("contents"))
-	switch mode {
-	case "":
-		mode = DeleteContents
-	case DeleteContents, MoveContents:
-	default:
-		httpx.Error(w, http.StatusBadRequest, "contents must be delete or move")
+	mode, ok := deleteMode(w, r)
+	if !ok {
 		return
 	}
 	keys, err := h.store.Delete(r.Context(), u.ID, id, mode)
@@ -141,11 +210,7 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, err)
 		return
 	}
-	for _, key := range keys {
-		if err := h.files.Delete(r.Context(), key); err != nil {
-			slog.Warn("delete object", "key", key, "error", err)
-		}
-	}
+	h.removeObjects(r.Context(), keys)
 	w.WriteHeader(http.StatusNoContent)
 }
 
