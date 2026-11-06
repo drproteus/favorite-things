@@ -1,0 +1,59 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: favs
+      POSTGRES_PASSWORD: favs
+      POSTGRES_DB: favorites
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U favs -d favorites"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: chainguard/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+
+  # Full stack in one container (API + built web app). For day-to-day development,
+  # run postgres and minio here and use the backend/frontend dev servers instead.
+  app:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    environment:
+      ADDR: ":8080"
+      PUBLIC_URL: http://localhost:8080
+      FRONTEND_URL: http://localhost:8080
+      DATABASE_URL: postgres://favs:favs@postgres:5432/favorites?sslmode=disable
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: http://localhost:9000
+      S3_BUCKET: favorite-things
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+    ports:
+      - "8080:8080"
+    profiles: ["full"]
+
+volumes:
+  pgdata:
+  miniodata:
