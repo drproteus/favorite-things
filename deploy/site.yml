@@ -11,17 +11,19 @@
         that:
           - favorite_things_db_password | length >= 16
           - favorite_things_db_password is match('^[A-Za-z0-9._~-]+$')
-          - favorite_things_minio_root_password | length >= 16
-          - favorite_things_minio_root_password is match('^[A-Za-z0-9._~-]+$')
+          - favorite_things_aws_access_key_id | length > 0
+          - favorite_things_aws_secret_access_key | length > 0
+          - favorite_things_aws_s3_bucket | length > 0
+          - favorite_things_aws_s3_region | length > 0
           - favorite_things_letsencrypt_email | length > 0
           - >-
             (favorite_things_github_client_id | length > 0 and favorite_things_github_client_secret | length > 0) or
             (favorite_things_google_client_id | length > 0 and favorite_things_google_client_secret | length > 0)
         fail_msg: >-
           Fill in deploy/group_vars/all/vault.yml (copy vault.yml.example). The
-          database password and MinIO root password must be URL-safe (letters,
-          digits, dot, underscore, tilde or hyphen) and at least 16 characters.
-          At least one OAuth provider must be configured.
+          database password must be URL-safe (letters, digits, dot, underscore,
+          tilde or hyphen) and at least 16 characters. AWS S3 credentials and
+          bucket are required. At least one OAuth provider must be configured.
 
     - name: Check the target platform
       ansible.builtin.assert:
@@ -109,13 +111,6 @@
         daemon_reload: true
       listen: Restart favorite-things
 
-    - name: Restart minio
-      ansible.builtin.systemd:
-        name: minio
-        state: restarted
-        daemon_reload: true
-      listen: Restart minio
-
   tasks:
     - name: Install packages
       ansible.builtin.apt:
@@ -167,7 +162,6 @@
         - { path: "{{ favorite_things_install_dir }}", owner: root, group: root, mode: "0755" }
         - { path: "{{ favorite_things_config_dir }}", owner: root, group: "{{ favorite_things_group }}", mode: "0750" }
         - { path: "{{ favorite_things_letsencrypt_webroot }}/.well-known/acme-challenge", owner: root, group: root, mode: "0755" }
-        - { path: "{{ favorite_things_minio_data_dir }}", owner: "{{ favorite_things_user }}", group: "{{ favorite_things_group }}", mode: "0750" }
 
     - name: Find PostgreSQL version
       ansible.builtin.shell:
@@ -221,46 +215,6 @@
       changed_when: false
       failed_when: false
 
-    - name: Build and install MinIO from source
-      ansible.builtin.shell:
-        cmd: |
-          set -e
-          export GOPATH=/tmp/go-minio
-          mkdir -p "$GOPATH"
-          echo "Building MinIO with GOPATH=$GOPATH, GOARCH={{ favorite_things_goarch }}"
-          CGO_ENABLED=0 GOOS=linux GOARCH={{ favorite_things_goarch }} go install -ldflags="-s -w" github.com/minio/minio@latest
-          echo "Build complete. Looking for binary..."
-          if [ -f "$GOPATH/bin/minio" ]; then
-            echo "Found at $GOPATH/bin/minio"
-            ls -lh "$GOPATH/bin/minio"
-          elif [ -f "$GOPATH/bin/linux_{{ favorite_things_goarch }}/minio" ]; then
-            echo "Found at $GOPATH/bin/linux_{{ favorite_things_goarch }}/minio"
-            ls -lh "$GOPATH/bin/linux_{{ favorite_things_goarch }}/minio"
-          else
-            echo "ERROR: minio binary not found!"
-            find "$GOPATH" -name "minio" -type f 2>/dev/null || echo "No minio files found"
-            exit 1
-          fi
-      delegate_to: localhost
-      become: false
-      changed_when: true
-      register: minio_build_result
-      ignore_errors: true
-
-    - name: Show MinIO build output
-      ansible.builtin.debug:
-        msg: "{{ minio_build_result.stdout_lines }}"
-      when: minio_build_result.stdout is defined
-
-    - name: Transfer MinIO binary to target
-      ansible.builtin.copy:
-        src: /tmp/go-minio/bin/minio
-        dest: /usr/local/bin/minio
-        owner: root
-        group: root
-        mode: "0755"
-      when: minio_build_result.rc == 0
-
     - name: Install the API binary
       ansible.builtin.copy:
         src: "{{ favorite_things_build_dir }}/favorite-things"
@@ -288,22 +242,6 @@
         group: root
         mode: "0644"
       notify: Restart favorite-things
-
-    - name: Install the systemd service for MinIO
-      ansible.builtin.template:
-        src: minio.service.j2
-        dest: /etc/systemd/system/minio.service
-        owner: root
-        group: root
-        mode: "0644"
-      notify: Restart minio
-
-    - name: Enable and start the MinIO service
-      ansible.builtin.systemd:
-        name: minio
-        state: started
-        enabled: true
-        daemon_reload: true
 
     - name: Enable and start the favorite-things service
       ansible.builtin.systemd:

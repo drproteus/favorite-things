@@ -5,7 +5,7 @@ This playbook deploys Favorite Things to a production host as:
 - a static Go binary at `/opt/favorite-things/favorite-things-api`
 - a hardened `favorite-things.service` systemd unit
 - a local PostgreSQL database
-- a local MinIO object storage server
+- AWS S3 for photo storage
 - nginx terminating TLS with a Let's Encrypt certificate and proxying to the API
 
 The SSH connection comes from your existing `~/.ssh/config` entry for the target;
@@ -19,6 +19,7 @@ no user or key is stored in the inventory.
 - DNS for `things.skinet.org` points at the target.
 - The controller has Ansible and Go installed. The playbook cross-compiles the
   binary locally for the target's architecture (`amd64` or `arm64`).
+- You have AWS S3 credentials and a bucket already created.
 
 ## First-time setup
 
@@ -33,7 +34,7 @@ Create the secrets file:
 
 ```bash
 cp group_vars/all/vault.yml.example group_vars/all/vault.yml
-# edit it with your secrets (GitHub/Google OAuth, MinIO password, Gemini key), then encrypt it:
+# edit it with your secrets (AWS S3, GitHub/Google OAuth, Gemini key), then encrypt it:
 ansible-vault encrypt group_vars/all/vault.yml
 ```
 
@@ -41,7 +42,10 @@ Fill in `vault.yml`:
 
 - `favorite_things_db_password` — a URL-safe random string such as
   `openssl rand -hex 24`.
-- `favorite_things_minio_root_password` — a URL-safe random string.
+- `favorite_things_aws_access_key_id` — your AWS IAM user's access key.
+- `favorite_things_aws_secret_access_key` — your AWS IAM user's secret key.
+- `favorite_things_aws_s3_bucket` — name of your S3 bucket for photos.
+- `favorite_things_aws_s3_region` — AWS region where the bucket lives (e.g. `us-east-1`).
 - `favorite_things_letsencrypt_email` — email for Let's Encrypt account.
 - `favorite_things_gemini_api_key` — your Google Gemini API key (optional if not using photo suggestions).
 - At least one OAuth pair: GitHub or Google (required for authentication).
@@ -63,7 +67,7 @@ ansible-playbook site.yml -i hosts.ini --ask-vault-pass --ask-become-pass
 The playbook reads the target from `hosts.ini` (which is `things.skinet.org`) and uses your SSH config for authentication.
 
 On the first run the playbook:
-1. Provisions PostgreSQL and MinIO
+1. Provisions PostgreSQL
 2. Builds and installs the API binary
 3. Serves the site over HTTP for the ACME challenge
 4. Obtains the TLS certificate
@@ -94,7 +98,7 @@ ssh things.skinet.org 'nginx -t'
 
 The Vite-built frontend is static HTML/JS. Deploy it via:
 
-1. **S3-compatible storage** (MinIO): Upload `frontend/dist/` to an S3 bucket and configure nginx to proxy `/` to it, or serve directly from MinIO.
+1. **S3**: Upload `frontend/dist/` to your S3 bucket and configure nginx to proxy or serve it.
 2. **CDN**: Push the dist folder to a CDN for geographic distribution.
 3. **Same server**: Copy `frontend/dist/` to `/var/www/html/favorite-things/` and configure nginx to serve it.
 
@@ -107,8 +111,7 @@ This playbook does not manage the frontend. Adjust nginx configuration (`templat
 - The API binds only to loopback (`127.0.0.1:8080`). nginx is the public listener.
 - The playbook assumes the stock Debian/Ubuntu `pg_hba.conf` allows password
   authentication from `127.0.0.1`.
-- MinIO runs on `127.0.0.1:9000` (S3 API) and `127.0.0.1:9001` (web UI); nginx
-  does not expose them publicly.
+- AWS S3 credentials are passed via environment variables to the API.
 - Certbot's systemd timer handles renewal, and a deploy hook reloads nginx after
   a renewal.
 - The playbook does not manage a firewall. Ensure SSH, HTTP and HTTPS are allowed
@@ -122,10 +125,10 @@ The API reads these from `favorite-things.env`:
 
 ```
 DATABASE_URL              PostgreSQL connection string (built from secrets)
-MINIO_URL                 MinIO S3 endpoint (http://127.0.0.1:9000)
-MINIO_ACCESS_KEY          MinIO root access key
-MINIO_SECRET_KEY          MinIO root secret key (from vault)
-MINIO_BUCKET              S3 bucket for photos (auto-created)
+AWS_ACCESS_KEY_ID         AWS IAM user access key
+AWS_SECRET_ACCESS_KEY     AWS IAM user secret key
+AWS_S3_BUCKET             S3 bucket name for photos
+AWS_S3_REGION             AWS region (e.g. us-east-1)
 GEMINI_API_KEY            Google Gemini API key (optional, for photo suggestions)
 SUGGEST_ENABLED           "true" to enable photo suggestions (requires GEMINI_API_KEY)
 GITHUB_CLIENT_ID          GitHub OAuth client ID

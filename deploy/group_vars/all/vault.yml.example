@@ -12,8 +12,13 @@
 #   openssl rand -base64 32 # base64 for keys
 
 favorite_things_db_password: ""
-favorite_things_minio_root_password: ""
 favorite_things_letsencrypt_email: ""
+
+# AWS S3 for photo storage
+favorite_things_aws_access_key_id: ""
+favorite_things_aws_secret_access_key: ""
+favorite_things_aws_s3_bucket: ""
+favorite_things_aws_s3_region: ""
 
 # Photo suggestions via Google Gemini. Leave empty to disable.
 favorite_things_gemini_api_key: ""

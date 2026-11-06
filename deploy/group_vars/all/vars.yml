@@ -23,19 +23,19 @@ favorite_things_db_user: favorite_things
 favorite_things_db_host: 127.0.0.1
 favorite_things_db_port: 5432
 
-favorite_things_minio_data_dir: /var/lib/minio
-favorite_things_minio_host: 127.0.0.1
-favorite_things_minio_port: 9000
-favorite_things_minio_console_port: 9001
-favorite_things_minio_url: "http://{{ favorite_things_minio_host }}:{{ favorite_things_minio_port }}"
-favorite_things_minio_bucket: favorite-things-photos
+# AWS S3 configuration
+favorite_things_aws_s3_bucket: ""  # Override in vault.yml
+favorite_things_aws_s3_region: "us-east-1"  # Override in vault.yml
 
 favorite_things_letsencrypt_webroot: /var/www/html
 favorite_things_letsencrypt_cert: "/etc/letsencrypt/live/{{ favorite_things_domain }}/fullchain.pem"
 
 # Secrets. Override these in group_vars/all/vault.yml (see vault.yml.example).
 favorite_things_db_password: ""
-favorite_things_minio_root_password: ""
+favorite_things_aws_access_key_id: ""
+favorite_things_aws_secret_access_key: ""
+favorite_things_aws_s3_bucket: ""
+favorite_things_aws_s3_region: "us-east-1"
 favorite_things_letsencrypt_email: ""
 favorite_things_gemini_api_key: ""
 favorite_things_github_client_id: ""
