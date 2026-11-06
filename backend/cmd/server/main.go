@@ -13,6 +13,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"favorite-things/backend/internal/auth"
+	"favorite-things/backend/internal/catalog"
 	"favorite-things/backend/internal/config"
 	"favorite-things/backend/internal/database"
 	"favorite-things/backend/internal/items"
@@ -58,6 +59,7 @@ func run() error {
 		authSvc,
 		auth.NewHandler(authSvc, cfg),
 		items.NewHandler(items.NewStore(pool), files),
+		catalog.NewHandler(catalog.NewStore(pool)),
 	)
 
 	srv := &http.Server{
