@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { CheckSquare, ChevronRight, Folder, FolderPlus, Globe, Lock, MoveRight, Pencil, Plus, Trash2 } from 'lucide-react'
-import { BulkDeleteDialog, BulkMoveDialog } from '../components/BulkDialogs'
+import { BulkDeleteDialog, BulkMoveDialog, BulkVisibilityDialog } from '../components/BulkDialogs'
 import { DeleteFolderDialog, FolderFormDialog } from '../components/FolderDialogs'
 import FolderTree from '../components/FolderTree'
 import ItemBrowser from '../components/ItemBrowser'
@@ -12,7 +12,7 @@ import { useCollections } from '../hooks'
 import type { Collection } from '../types'
 import { btnGhost, btnPrimary, btnSecondary, card } from '../ui'
 
-type Dialog = 'new' | 'edit' | 'delete' | 'bulk-move' | 'bulk-delete' | null
+type Dialog = 'new' | 'edit' | 'delete' | 'bulk-move' | 'bulk-visibility' | 'bulk-delete' | null
 
 interface Picked {
   itemIds: string[]
@@ -199,6 +199,14 @@ export default function CollectionPage() {
           </button>
           <button
             type="button"
+            onClick={() => setDialog('bulk-visibility')}
+            disabled={pickedCount === 0}
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 font-medium transition hover:bg-white/25 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-stone-900/10 dark:hover:bg-stone-900/20"
+          >
+            <Globe size={15} /> Visibility
+          </button>
+          <button
+            type="button"
             onClick={() => setDialog('bulk-delete')}
             disabled={pickedCount === 0}
             className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-rose-600 px-3 py-1.5 font-medium text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-40"
@@ -245,6 +253,9 @@ export default function CollectionPage() {
           onClose={() => setDialog(null)}
           onDone={finish}
         />
+      )}
+      {dialog === 'bulk-visibility' && (
+        <BulkVisibilityDialog picked={picked} onClose={() => setDialog(null)} onDone={finish} />
       )}
       {dialog === 'bulk-delete' && (
         <BulkDeleteDialog picked={picked} onClose={() => setDialog(null)} onDone={finish} />

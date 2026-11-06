@@ -12,7 +12,8 @@ A personal inventory and collection app. Catalog anything you collect (consoles,
 - Folders: every user has a root folder, and folders nest under it to any depth. Each item sits in one folder. Folders can be moved, renamed and set public or private
 - A private folder hides everything inside it, even items marked public
 - Deleting a folder asks whether to delete its contents or move them up one level. Deleting everything is the default
-- Select mode in My collection: pick items and folders, then move them to another folder or delete them together
+- Select mode in My collection: pick items and folders, then move them, change their visibility, or delete them together
+- Changing a folder's visibility can also apply to everything inside it
 - Public or private visibility, toggled from the item page or the edit form
 - Explore page for public items, with search and tag filters
 - Drag-and-drop or browse to add photos
@@ -140,15 +141,27 @@ This starts Postgres, MinIO and the app at http://localhost:8080. Put your OAuth
 | POST | `/api/collections` | yes | Create `{ "name", "visibility", "parentId" }` (parent defaults to root) |
 | PUT | `/api/collections/{id}` | owner | Update `{ "name", "visibility", "parentId" }`; moves the folder. The root can't be changed |
 | DELETE | `/api/collections/{id}?contents=delete\|move` | owner | Delete a folder. `delete` (default) removes everything inside it; `move` moves the contents up to the parent |
-| POST | `/api/items/bulk/move` | owner | Move items `{ "ids": [...], "collectionId" }`. All or nothing |
+| PUT | `/api/collections/{id}` | owner | Update `{ "name", "visibility", "parentId", "recursive" }`. `recursive: true` also applies the visibility to everything inside the folder |
+| POST | `/api/items/bulk/move` | owner | Move items `{ "ids": [...], "collectionId" }`. Items you don't own are skipped; the destination must be yours |
 | POST | `/api/items/bulk/delete` | owner | Delete items `{ "ids": [...] }`. Items you don't own are skipped |
-| POST | `/api/collections/bulk/move` | owner | Move folders `{ "ids": [...], "parentId" }`. All or nothing |
+| POST | `/api/items/bulk/visibility` | owner | Set items public or private `{ "ids": [...], "visibility" }`. Items you don't own are skipped |
+| POST | `/api/collections/bulk/move` | owner | Move folders `{ "ids": [...], "parentId" }`. Folders you don't own are skipped; any other failure undoes the whole batch |
 | POST | `/api/collections/bulk/delete?contents=delete\|move` | owner | Delete folders `{ "ids": [...] }`, with the same `contents` choice as above. All or nothing |
+| POST | `/api/collections/bulk/visibility` | owner | Set folders public or private `{ "ids": [...], "visibility", "recursive" }`. Folders you don't own are skipped |
 | GET | `/api/tags` | yes | Hashtags used on your items (for the filter) |
+
+Users are isolated: nobody can see or change another user's items or folders, and folders can only hold your own items and subfolders.
 
 ## Tests and checks
 
 ```sh
 cd backend && go vet ./... && go build ./...
 cd frontend && npm run build
+```
+
+The access tests run the HTTP API against a real database. They cover moves, deletes and visibility changes across users, and recursive folder visibility. They are skipped unless `TEST_DATABASE_URL` is set. Use a database that can be wiped, since each test creates and removes its own users:
+
+```sh
+docker exec favorite-things-postgres-1 psql -U favs -d favorites -c "CREATE DATABASE favorites_test;"
+cd backend && TEST_DATABASE_URL="postgres://favs:favs@localhost:5433/favorites_test?sslmode=disable" go test ./...
 ```

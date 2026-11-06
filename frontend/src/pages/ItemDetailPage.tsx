@@ -86,9 +86,17 @@ function ItemView({ item }: { item: Item }) {
 
       <div className="grid gap-8 lg:grid-cols-5">
         <section className="space-y-3 lg:col-span-3">
-          <div className="flex aspect-4/3 items-center justify-center overflow-hidden rounded-2xl bg-stone-100 dark:bg-stone-800">
+          <div className="relative flex aspect-4/3 items-center justify-center overflow-hidden rounded-2xl bg-stone-100 dark:bg-stone-800">
             {current ? (
-              <img src={current.url} alt={item.title} className="h-full w-full object-contain" />
+              <>
+                <img
+                  src={current.url}
+                  alt=""
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 h-full w-full scale-125 object-cover opacity-60 blur-2xl"
+                />
+                <img src={current.url} alt={item.title} className="relative h-full w-full object-contain" />
+              </>
             ) : (
               <div className="flex flex-col items-center gap-2 text-stone-400">
                 <ImageOff size={40} />

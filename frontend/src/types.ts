@@ -27,6 +27,8 @@ export interface CollectionInput {
   name: string
   visibility: Visibility
   parentId: string
+  // Also apply the visibility to every subfolder and item inside the folder.
+  recursive?: boolean
 }
 
 export type DeleteContents = 'delete' | 'move'

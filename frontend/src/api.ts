@@ -1,4 +1,14 @@
-import type { Collection, CollectionInput, DeleteContents, Item, ItemFilter, ItemImage, ItemInput, User } from './types'
+import type {
+  Collection,
+  CollectionInput,
+  DeleteContents,
+  Item,
+  ItemFilter,
+  ItemImage,
+  ItemInput,
+  User,
+  Visibility,
+} from './types'
 
 export class ApiError extends Error {
   status: number
@@ -83,4 +93,8 @@ export const api = {
     request<void>('/collections/bulk/move', { method: 'POST', json: { ids, parentId } }),
   bulkDeleteCollections: (ids: string[], contents: DeleteContents) =>
     request<void>(`/collections/bulk/delete?contents=${contents}`, { method: 'POST', json: { ids } }),
+  bulkVisibilityItems: (ids: string[], visibility: Visibility) =>
+    request<void>('/items/bulk/visibility', { method: 'POST', json: { ids, visibility } }),
+  bulkVisibilityCollections: (ids: string[], visibility: Visibility, recursive: boolean) =>
+    request<void>('/collections/bulk/visibility', { method: 'POST', json: { ids, visibility, recursive } }),
 }

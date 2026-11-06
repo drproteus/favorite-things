@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api'
 import { flattenFolders, rootFolder } from '../folders'
-import type { Collection, DeleteContents } from '../types'
+import type { Collection, DeleteContents, Visibility } from '../types'
 import { btnDanger, btnPrimary, btnSecondary, input, label } from '../ui'
 import { Modal } from './FolderDialogs'
 
@@ -85,6 +85,88 @@ export function BulkMoveDialog({
           </button>
           <button type="button" onClick={() => move.mutate()} disabled={move.isPending || !destination} className={btnPrimary}>
             {move.isPending ? 'Moving…' : 'Move'}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+export function BulkVisibilityDialog({
+  picked,
+  onClose,
+  onDone,
+}: {
+  picked: Picked
+  onClose: () => void
+  onDone: () => void
+}) {
+  const qc = useQueryClient()
+  const [visibility, setVisibility] = useState<Visibility>('public')
+  const [recursive, setRecursive] = useState(false)
+  const hasFolders = picked.folderIds.length > 0
+
+  const change = useMutation({
+    mutationFn: async () => {
+      if (picked.folderIds.length) await api.bulkVisibilityCollections(picked.folderIds, visibility, recursive)
+      if (picked.itemIds.length) await api.bulkVisibilityItems(picked.itemIds, visibility)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['collections'] })
+      qc.invalidateQueries({ queryKey: ['items'] })
+      onDone()
+    },
+  })
+
+  return (
+    <Modal title={`Change visibility of ${countText(picked)}`} onClose={onClose}>
+      <div className="space-y-5">
+        <div>
+          <span className={label}>Visibility</span>
+          <div role="radiogroup" aria-label="Visibility" className="grid grid-cols-2 gap-1 rounded-lg bg-stone-100 p-1 dark:bg-stone-800">
+            {(['public', 'private'] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                role="radio"
+                aria-checked={visibility === v}
+                onClick={() => setVisibility(v)}
+                className={`cursor-pointer rounded-md px-3 py-2 text-sm font-medium capitalize transition ${
+                  visibility === v
+                    ? 'bg-white text-indigo-700 shadow-sm dark:bg-stone-900 dark:text-indigo-300'
+                    : 'text-stone-500 dark:text-stone-400'
+                }`}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {hasFolders && (
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-stone-200 p-3 dark:border-stone-700">
+            <input type="checkbox" className="mt-1" checked={recursive} onChange={(e) => setRecursive(e.target.checked)} />
+            <span>
+              <span className="block text-sm font-medium">Also apply to everything inside the selected folders</span>
+              <span className="block text-xs text-stone-500 dark:text-stone-400">
+                Subfolders and every item in them change too.
+              </span>
+            </span>
+          </label>
+        )}
+
+        {change.error && (
+          <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">
+            {change.error.message}
+          </p>
+        )}
+
+        <div className="flex justify-end gap-3">
+          <button type="button" onClick={onClose} className={btnSecondary}>
+            Cancel
+          </button>
+          <button type="button" onClick={() => change.mutate()} disabled={change.isPending} className={btnPrimary}>
+            {change.isPending ? 'Saving…' : 'Apply'}
           </button>
         </div>
       </div>

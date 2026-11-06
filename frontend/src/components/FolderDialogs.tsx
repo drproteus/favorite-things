@@ -37,10 +37,12 @@ export function FolderFormDialog({ folders, folder, defaultParentId, onClose }: 
   const [name, setName] = useState(folder?.name ?? '')
   const [visibility, setVisibility] = useState<Visibility>(folder?.visibility ?? 'private')
   const [parentId, setParentId] = useState(folder?.parentId ?? defaultParentId)
+  const [recursive, setRecursive] = useState(false)
+  const visibilityChanged = editing && !isRoot && visibility !== folder.visibility
 
   const save = useMutation({
     mutationFn: () => {
-      const input = { name: name.trim(), visibility, parentId }
+      const input = { name: name.trim(), visibility, parentId, recursive: visibilityChanged && recursive }
       return editing ? api.updateCollection(folder.id, input) : api.createCollection(input)
     },
     onSuccess: () => {
@@ -114,6 +116,23 @@ export function FolderFormDialog({ folders, folder, defaultParentId, onClose }: 
               A private folder hides everything inside it from other people, even items marked public.
             </p>
           </div>
+        )}
+
+        {visibilityChanged && (
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-stone-200 p-3 dark:border-stone-700">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={recursive}
+              onChange={(e) => setRecursive(e.target.checked)}
+            />
+            <span>
+              <span className="block text-sm font-medium">Also make everything inside {visibility}</span>
+              <span className="block text-xs text-stone-500 dark:text-stone-400">
+                Applies to subfolders and to every item in them.
+              </span>
+            </span>
+          </label>
         )}
 
         {save.error && (
