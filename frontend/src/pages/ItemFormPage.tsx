@@ -1,7 +1,7 @@
 import { useState, type ChangeEvent, type DragEvent, type FormEvent } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Globe, ImageOff, Lock, Upload, X } from 'lucide-react'
+import { Globe, ImageOff, Lock, Sparkles, Upload, X } from 'lucide-react'
 import { api } from '../api'
 import { ErrorState, Loading } from '../components/Status'
 import { flattenFolders, rootFolder } from '../folders'
@@ -12,6 +12,12 @@ import { btnPrimary, btnSecondary, card, input, label } from '../ui'
 const MAX_IMAGES = 20
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+
+// Adds #hashtags that the description doesn't already contain.
+function addMissingTags(description: string, tags: string[]) {
+  const missing = tags.map((t) => `#${t}`).filter((t) => !description.toLowerCase().includes(t))
+  return [description.trim(), ...missing].filter(Boolean).join(' ')
+}
 
 interface PendingFile {
   file: File
@@ -48,12 +54,32 @@ function ItemForm({ existing, folders, defaultFolder }: { existing?: Item; folde
   const [pending, setPending] = useState<PendingFile[]>([])
   const [fileError, setFileError] = useState('')
   const [dragging, setDragging] = useState(false)
+  const [suggesting, setSuggesting] = useState(false)
+  const [suggestError, setSuggestError] = useState('')
 
   const existingImages = existing?.images ?? []
   const imageCount = existingImages.length + pending.length
 
   const update = <K extends keyof ItemInput>(key: K, value: ItemInput[K]) =>
     setForm((f) => ({ ...f, [key]: value }))
+
+  // Fills in only the fields that are still empty, so nothing already typed is overwritten.
+  const suggestFrom = async (file: File, quiet = false) => {
+    setSuggesting(true)
+    setSuggestError('')
+    try {
+      const s = await api.suggestItem(file)
+      setForm((f) => ({
+        ...f,
+        title: f.title.trim() ? f.title : s.title,
+        description: f.description.trim() ? addMissingTags(f.description, s.tags) : s.description,
+      }))
+    } catch (err) {
+      if (!quiet) setSuggestError(err instanceof Error ? err.message : 'Photo suggestion failed')
+    } finally {
+      setSuggesting(false)
+    }
+  }
 
   const queueFiles = (picked: File[]) => {
     const accepted: PendingFile[] = []
@@ -70,6 +96,10 @@ function ItemForm({ existing, folders, defaultFolder }: { existing?: Item; folde
     }
     setFileError(errors.join('; '))
     setPending((p) => [...p, ...accepted])
+    const firstPhoto = existing === undefined && imageCount === 0 && accepted.length > 0
+    if (firstPhoto && !form.title.trim() && !form.description.trim()) {
+      void suggestFrom(accepted[0].file, true)
+    }
   }
 
   const onPickFiles = (e: ChangeEvent<HTMLInputElement>) => {
@@ -272,6 +302,19 @@ function ItemForm({ existing, folders, defaultFolder }: { existing?: Item; folde
           <p className="text-xs text-stone-500 dark:text-stone-400">
             Drag and drop or browse. JPEG, PNG, GIF or WebP, up to 10 MB each.
           </p>
+          {pending.length > 0 && (
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => suggestFrom(pending[0].file)}
+                disabled={suggesting}
+                className={btnSecondary}
+              >
+                <Sparkles size={16} /> {suggesting ? 'Reading photo…' : 'Suggest from photo'}
+              </button>
+              {suggestError && <span className="text-sm text-rose-600 dark:text-rose-400">{suggestError}</span>}
+            </div>
+          )}
         </div>
 
         {save.error && (

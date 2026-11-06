@@ -48,6 +48,12 @@ export interface Item {
   updatedAt: string
 }
 
+export interface Suggestion {
+  title: string
+  description: string
+  tags: string[]
+}
+
 export interface ItemInput {
   title: string
   description: string

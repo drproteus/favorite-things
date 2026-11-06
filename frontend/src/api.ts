@@ -6,6 +6,7 @@ import type {
   ItemFilter,
   ItemImage,
   ItemInput,
+  Suggestion,
   User,
   Visibility,
 } from './types'
@@ -68,6 +69,11 @@ export const api = {
     const form = new FormData()
     form.append('file', file)
     return request<ItemImage>(`/items/${itemId}/images`, { method: 'POST', body: form })
+  },
+  suggestItem: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return request<Suggestion>('/items/suggest', { method: 'POST', body: form })
   },
   deleteImage: (itemId: string, imageId: string) =>
     request<void>(`/items/${itemId}/images/${imageId}`, { method: 'DELETE' }),
