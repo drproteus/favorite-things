@@ -69,13 +69,13 @@ export default function ItemCard({ item, select }: Props) {
   // Private items don't show on Explore, so their tags are plain text.
   return (
     <div className={`group relative ${card} flex flex-col overflow-hidden transition hover:-translate-y-0.5 hover:shadow-md`}>
-      <Link to={`/items/${item.id}`} aria-label={item.title} className="absolute inset-0 rounded-2xl" />
+      <Link to={`/items/${item.id}`} aria-label={item.title} className="absolute inset-0 z-10 rounded-2xl" />
       {details((t) =>
         isPublic ? (
           <Link
             key={t}
             to={`/explore?tag=${encodeURIComponent(t)}`}
-            className={`${chip} relative transition hover:bg-indigo-100 dark:hover:bg-indigo-900`}
+            className={`${chip} relative z-20 transition hover:bg-indigo-100 dark:hover:bg-indigo-900`}
           >
             {t}
           </Link>
