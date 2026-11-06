@@ -2,7 +2,7 @@
 # Ansible's PostgreSQL modules.
 ansible_python_interpreter: /usr/bin/python3
 
-favorite_things_domain: favorite-things.example.com
+favorite_things_domain: things.skinet.org
 favorite_things_base_url: "https://{{ favorite_things_domain }}"
 favorite_things_api_url: "{{ favorite_things_base_url }}/api"
 

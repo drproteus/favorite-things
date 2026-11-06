@@ -14,8 +14,9 @@ no user or key is stored in the inventory.
 ## Assumptions
 
 - The target is Debian or Ubuntu.
-- The target has SSH access, sudo, and ports 80/443 reachable from the internet.
-- DNS for the domain points at the target.
+- The target has SSH access via your `~/.ssh/config` entry for `things.skinet.org`, with sudo access.
+- Ports 80/443 are reachable from the internet.
+- DNS for `things.skinet.org` points at the target.
 - The controller has Ansible and Go installed. The playbook cross-compiles the
   binary locally for the target's architecture (`amd64` or `arm64`).
 
@@ -32,13 +33,12 @@ Create the secrets file:
 
 ```bash
 cp group_vars/all/vault.yml.example group_vars/all/vault.yml
-# edit it, then either leave it plaintext (git-ignored) or encrypt it:
+# edit it with your secrets (GitHub/Google OAuth, MinIO password, Gemini key), then encrypt it:
 ansible-vault encrypt group_vars/all/vault.yml
 ```
 
-Fill in:
+Fill in `vault.yml`:
 
-- `favorite_things_domain` — the public domain (e.g., `favorite-things.example.com`).
 - `favorite_things_db_password` — a URL-safe random string such as
   `openssl rand -hex 24`.
 - `favorite_things_minio_root_password` — a URL-safe random string.
@@ -48,8 +48,8 @@ Fill in:
 
 Register the OAuth callback URLs with the providers:
 
-- GitHub: `https://<domain>/api/auth/github/callback`
-- Google: `https://<domain>/api/auth/google/callback`
+- GitHub: `https://things.skinet.org/api/auth/github/callback`
+- Google: `https://things.skinet.org/api/auth/google/callback`
 
 ## Deploy
 
@@ -57,14 +57,10 @@ From this directory:
 
 ```bash
 cd deploy
-ansible-playbook site.yml -i <host>
+ansible-playbook site.yml --ask-vault-pass --ask-become-pass
 ```
 
-If `vault.yml` is encrypted, or your sudo needs a password:
-
-```bash
-ansible-playbook site.yml -i <host> --ask-vault-pass --ask-become-pass
-```
+The playbook reads the target from `hosts.ini` (which is `things.skinet.org`) and uses your SSH config for authentication.
 
 On the first run the playbook:
 1. Provisions PostgreSQL and MinIO
@@ -82,16 +78,16 @@ restarts the service, and reloads nginx when configuration changes:
 
 ```bash
 cd deploy
-ansible-playbook site.yml -i <host> --ask-vault-pass
+ansible-playbook site.yml --ask-vault-pass
 ```
 
 ## Checking the deployment
 
 ```bash
-curl -fsS https://<domain>/api/health
-ssh <host> 'systemctl status favorite-things --no-pager'
-ssh <host> 'journalctl -u favorite-things -n 50 --no-pager'
-ssh <host> 'nginx -t'
+curl -fsS https://things.skinet.org/api/health
+ssh things.skinet.org 'systemctl status favorite-things --no-pager'
+ssh things.skinet.org 'journalctl -u favorite-things -n 50 --no-pager'
+ssh things.skinet.org 'nginx -t'
 ```
 
 ## Frontend deployment
