@@ -45,10 +45,6 @@ Explore, with the most-used public tags:
 
 ![Explore](docs/screenshots/explore.png)
 
-A public profile:
-
-![Profile](docs/screenshots/profile.png)
-
 ## Project layout
 
 ```
