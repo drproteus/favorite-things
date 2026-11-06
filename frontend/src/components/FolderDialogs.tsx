@@ -27,9 +27,10 @@ interface FormProps {
   folder?: Collection
   defaultParentId: string
   onClose: () => void
+  onDelete?: () => void
 }
 
-export function FolderFormDialog({ folders, folder, defaultParentId, onClose }: FormProps) {
+export function FolderFormDialog({ folders, folder, defaultParentId, onClose, onDelete }: FormProps) {
   const qc = useQueryClient()
   const editing = folder !== undefined
   const isRoot = editing && folder.parentId === null
@@ -141,13 +142,20 @@ export function FolderFormDialog({ folders, folder, defaultParentId, onClose }: 
           </p>
         )}
 
-        <div className="flex justify-end gap-3">
-          <button type="button" onClick={onClose} className={btnSecondary}>
-            Cancel
-          </button>
-          <button type="submit" disabled={save.isPending || !name.trim()} className={btnPrimary}>
-            {save.isPending ? 'Saving…' : editing ? 'Save' : 'Create folder'}
-          </button>
+        <div className="flex items-center gap-3">
+          {editing && onDelete && (
+            <button type="button" onClick={onDelete} className={btnDanger}>
+              Delete
+            </button>
+          )}
+          <div className="ml-auto flex gap-3">
+            <button type="button" onClick={onClose} className={btnSecondary}>
+              Cancel
+            </button>
+            <button type="submit" disabled={save.isPending || !name.trim()} className={btnPrimary}>
+              {save.isPending ? 'Saving…' : editing ? 'Save' : 'Create folder'}
+            </button>
+          </div>
         </div>
       </form>
     </Modal>

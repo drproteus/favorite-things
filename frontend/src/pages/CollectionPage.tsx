@@ -58,39 +58,31 @@ export default function CollectionPage() {
   const pickedCount = picked.itemIds.length + picked.folderIds.length
 
   const actions = (
-    <div className="flex flex-wrap items-center justify-end gap-2">
-      <button
-        type="button"
-        onClick={() => (selecting ? clearSelection() : setSelecting(true))}
-        className={selecting ? btnPrimary : btnSecondary}
-      >
-        <CheckSquare size={16} /> {selecting ? 'Done selecting' : 'Select'}
-      </button>
-      {!selecting && (
-        <>
-          <button type="button" onClick={() => setDialog('new')} className={btnSecondary}>
-            <FolderPlus size={16} /> New folder
-          </button>
-          {!isRoot && (
-            <>
-              <button type="button" onClick={() => setDialog('edit')} className={btnGhost} aria-label="Edit folder">
-                <Pencil size={16} />
-              </button>
-              <button
-                type="button"
-                onClick={() => setDialog('delete')}
-                className={`${btnGhost} hover:text-rose-600`}
-                aria-label="Delete folder"
-              >
-                <Trash2 size={16} />
-              </button>
-            </>
-          )}
-          <Link to={`/items/new?folder=${current.id}`} className={btnPrimary}>
-            <Plus size={16} /> New item
-          </Link>
-        </>
+    <div className="flex flex-wrap items-center gap-2">
+      {!selecting && !isRoot && (
+        <button type="button" onClick={() => setDialog('edit')} className={btnGhost} aria-label="Edit folder">
+          <Pencil size={16} />
+        </button>
       )}
+      <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => (selecting ? clearSelection() : setSelecting(true))}
+          className={selecting ? btnPrimary : btnSecondary}
+        >
+          <CheckSquare size={16} /> {selecting ? 'Done selecting' : 'Select'}
+        </button>
+        {!selecting && (
+          <>
+            <button type="button" onClick={() => setDialog('new')} className={btnSecondary}>
+              <FolderPlus size={16} /> New folder
+            </button>
+            <Link to={`/items/new?folder=${current.id}`} className={btnPrimary}>
+              <Plus size={16} /> New item
+            </Link>
+          </>
+        )}
+      </div>
     </div>
   )
 
@@ -232,6 +224,7 @@ export default function CollectionPage() {
           folder={current}
           defaultParentId={current.parentId ?? root.id}
           onClose={() => setDialog(null)}
+          onDelete={() => setDialog('delete')}
         />
       )}
       {dialog === 'delete' && !isRoot && (
