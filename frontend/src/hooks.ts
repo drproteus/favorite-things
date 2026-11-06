@@ -50,11 +50,11 @@ export function usePublicUser(id: string) {
   })
 }
 
-export function usePublicCollections(id: string) {
+export function usePublicCollections(id: string, enabled = true) {
   return useQuery({
     queryKey: ['user-collections', id],
     queryFn: () => api.publicCollections(id),
-    enabled: id !== '',
+    enabled: enabled && id !== '',
   })
 }
 

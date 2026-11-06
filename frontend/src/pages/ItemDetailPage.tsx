@@ -8,7 +8,7 @@ import { BulkMoveDialog } from '../components/BulkDialogs'
 import StarRating from '../components/StarRating'
 import { ErrorState, Loading } from '../components/Status'
 import { pathTo } from '../folders'
-import { useCollections, useItem, useMe } from '../hooks'
+import { useCollections, useItem, useMe, usePublicCollections } from '../hooks'
 import { itemToInput, type Item, type Visibility } from '../types'
 import { btnGhost, btnPrimary, btnSecondary, card, chip } from '../ui'
 
@@ -33,6 +33,8 @@ function ItemView({ item }: { item: Item }) {
   const current = item.images[active]
   const folders = useCollections(isOwner)
   const folderPath = folders.data ? pathTo(folders.data, item.collectionId) : []
+  const publicFolders = usePublicCollections(item.ownerId, !isOwner)
+  const publicPath = publicFolders.data ? pathTo(publicFolders.data, item.collectionId) : []
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['items'] })
@@ -139,6 +141,15 @@ function ItemView({ item }: { item: Item }) {
                 <Link to={`/collection?folder=${item.collectionId}`} className={`${chip} inline-flex items-center gap-1`}>
                   <Folder size={12} />
                   {folderPath.map((f) => (f.parentId === null ? 'My collection' : f.name)).join(' / ')}
+                </Link>
+              )}
+              {!isOwner && publicPath.length > 0 && (
+                <Link
+                  to={`/users/${item.ownerId}/folders/${item.collectionId}`}
+                  className={`${chip} inline-flex items-center gap-1 transition hover:bg-indigo-100 dark:hover:bg-indigo-900`}
+                >
+                  <Folder size={12} />
+                  {publicPath.map((f) => (f.parentId === null ? `${item.ownerName}'s collection` : f.name)).join(' / ')}
                 </Link>
               )}
             </div>

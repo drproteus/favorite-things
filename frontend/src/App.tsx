@@ -10,6 +10,7 @@ import ItemDetailPage from './pages/ItemDetailPage'
 import ItemFormPage from './pages/ItemFormPage'
 import LoginPage from './pages/LoginPage'
 import ProfilePage from './pages/ProfilePage'
+import PublicFolderPage from './pages/PublicFolderPage'
 import SettingsPage from './pages/SettingsPage'
 import { btnPrimary } from './ui'
 
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="login" element={<LoginPage />} />
         <Route path="explore" element={<ExplorePage />} />
         <Route path="users/:id" element={<ProfilePage />} />
+        <Route path="users/:id/folders/:folderId" element={<PublicFolderPage />} />
         <Route
           path="settings"
           element={

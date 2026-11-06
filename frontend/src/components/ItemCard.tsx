@@ -14,7 +14,7 @@ export default function ItemCard({ item, select }: Props) {
   const cover = item.images[0]?.url
   const isPublic = item.visibility === 'public'
 
-  const body: ReactNode = (
+  const details = (tagChip: (tag: string) => ReactNode): ReactNode => (
     <>
       <div className="aspect-4/3 bg-stone-100 dark:bg-stone-800">
         {cover ? (
@@ -39,11 +39,7 @@ export default function ItemCard({ item, select }: Props) {
 
         <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
           {item.rating !== null && <StarRating value={item.rating} size={14} />}
-          {item.tags.slice(0, 3).map((t) => (
-            <span key={t} className={chip}>
-              {t}
-            </span>
-          ))}
+          {item.tags.slice(0, 3).map((t) => tagChip(t))}
         </div>
       </div>
     </>
@@ -60,18 +56,36 @@ export default function ItemCard({ item, select }: Props) {
         }`}
       >
         <SelectMark selected={select.selected} />
-        {body}
+        {details((t) => (
+          <span key={t} className={chip}>
+            {t}
+          </span>
+        ))}
       </button>
     )
   }
 
+  // The whole card opens the item. Tags sit above that link, so each one can open Explore on its own.
+  // Private items don't show on Explore, so their tags are plain text.
   return (
-    <Link
-      to={`/items/${item.id}`}
-      className={`group ${card} flex flex-col overflow-hidden transition hover:-translate-y-0.5 hover:shadow-md`}
-    >
-      {body}
-    </Link>
+    <div className={`group relative ${card} flex flex-col overflow-hidden transition hover:-translate-y-0.5 hover:shadow-md`}>
+      <Link to={`/items/${item.id}`} aria-label={item.title} className="absolute inset-0 rounded-2xl" />
+      {details((t) =>
+        isPublic ? (
+          <Link
+            key={t}
+            to={`/explore?tag=${encodeURIComponent(t)}`}
+            className={`${chip} relative transition hover:bg-indigo-100 dark:hover:bg-indigo-900`}
+          >
+            {t}
+          </Link>
+        ) : (
+          <span key={t} className={chip}>
+            {t}
+          </span>
+        ),
+      )}
+    </div>
   )
 }
 
