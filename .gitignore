@@ -28,4 +28,3 @@ miniodata/
 *.swp
 .DS_Store
 Thumbs.db
-deploy/group_vars/all/vault.yml
