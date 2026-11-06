@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { LogOut, Menu, Plus, Sparkles, X } from 'lucide-react'
+import { LogOut, Menu, Sparkles, X } from 'lucide-react'
 import { useLogout, useMe } from '../hooks'
 import { btnPrimary, btnGhost } from '../ui'
 
@@ -48,10 +48,6 @@ export default function Layout() {
           <div className="flex items-center gap-2">
             {me ? (
               <>
-                <Link to="/items/new" className={btnPrimary} aria-label="New item">
-                  <Plus size={16} />
-                  <span className="hidden sm:inline">New item</span>
-                </Link>
                 <div className="hidden items-center gap-2 md:flex">
                   {me.avatarUrl ? (
                     <img src={me.avatarUrl} alt="" className="h-8 w-8 rounded-full" referrerPolicy="no-referrer" />

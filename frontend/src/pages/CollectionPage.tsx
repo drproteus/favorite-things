@@ -58,7 +58,7 @@ export default function CollectionPage() {
   const pickedCount = picked.itemIds.length + picked.folderIds.length
 
   const actions = (
-    <>
+    <div className="flex flex-wrap items-center justify-end gap-2">
       <button
         type="button"
         onClick={() => (selecting ? clearSelection() : setSelecting(true))}
@@ -91,7 +91,7 @@ export default function CollectionPage() {
           </Link>
         </>
       )}
-    </>
+    </div>
   )
 
   const breadcrumb = path.length > 1 && (
