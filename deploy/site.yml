@@ -169,13 +169,26 @@
         - { path: "{{ favorite_things_letsencrypt_webroot }}/.well-known/acme-challenge", owner: root, group: root, mode: "0755" }
         - { path: "{{ favorite_things_minio_data_dir }}", owner: "{{ favorite_things_user }}", group: "{{ favorite_things_group }}", mode: "0750" }
 
+    - name: Find PostgreSQL version
+      ansible.builtin.shell:
+        cmd: ls -d /etc/postgresql/*/main/ 2>/dev/null | head -1 | sed 's|/main||'
+      register: pg_version
+      changed_when: false
+      failed_when: false
+
+    - name: Set PostgreSQL config path
+      ansible.builtin.set_fact:
+        pg_hba_conf: "{{ pg_version.stdout }}/main/pg_hba.conf"
+      when: pg_version.stdout | length > 0
+
     - name: Configure PostgreSQL to accept local password connections
       ansible.builtin.lineinfile:
-        path: /etc/postgresql/*/main/pg_hba.conf
+        path: "{{ pg_hba_conf }}"
         regexp: '^local\s+all\s+all\s+peer'
         line: 'local   all             all                                     md5'
         state: present
       notify: Restart PostgreSQL
+      when: pg_hba_conf is defined
 
     - name: Restart PostgreSQL for config changes
       ansible.builtin.systemd:
