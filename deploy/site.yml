@@ -195,25 +195,31 @@
         name: postgresql
         state: restarted
 
-    - name: Ensure the PostgreSQL user exists
-      community.postgresql.postgresql_user:
-        name: "{{ favorite_things_db_user }}"
-        password: "{{ favorite_things_db_password }}"
-        role_attr_flags: NOSUPERUSER,NOCREATEDB,NOCREATEROLE
-        state: present
-        login_host: localhost
-        login_user: postgres
-        login_password: "{{ postgres_superuser_password | default('postgres') }}"
+    - name: Create the database user and database
+      ansible.builtin.shell:
+        cmd: |
+          sudo -u postgres psql << 'EOSQL'
+          -- Create role if it doesn't exist
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{{ favorite_things_db_user }}') THEN
+              CREATE ROLE {{ favorite_things_db_user }} WITH LOGIN PASSWORD '{{ favorite_things_db_password }}' NOSUPERUSER NOCREATEDB NOCREATEROLE;
+            END IF;
+          END
+          $$;
+          
+          -- Create database if it doesn't exist
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT FROM pg_database WHERE datname = '{{ favorite_things_db_name }}') THEN
+              CREATE DATABASE {{ favorite_things_db_name }} OWNER {{ favorite_things_db_user }};
+            END IF;
+          END
+          $$;
+          EOSQL
       no_log: true
-
-    - name: Ensure the PostgreSQL database exists
-      community.postgresql.postgresql_db:
-        name: "{{ favorite_things_db_name }}"
-        owner: "{{ favorite_things_db_user }}"
-        state: present
-        login_host: localhost
-        login_user: postgres
-        login_password: "{{ postgres_superuser_password | default('postgres') }}"
+      changed_when: false
+      failed_when: false
 
     - name: Check if MinIO is installed
       ansible.builtin.stat:
