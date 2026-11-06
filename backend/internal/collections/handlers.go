@@ -34,6 +34,25 @@ func (h *Handler) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/collections/bulk/move", auth.RequireUser(h.bulkMove))
 	mux.HandleFunc("POST /api/collections/bulk/delete", auth.RequireUser(h.bulkDelete))
 	mux.HandleFunc("POST /api/collections/bulk/visibility", auth.RequireUser(h.bulkVisibility))
+	mux.HandleFunc("GET /api/users/{id}/collections", h.publicList)
+}
+
+// publicList returns the folders of one user that anyone can see, for their profile page.
+func (h *Handler) publicList(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		httpx.Error(w, http.StatusNotFound, "user not found")
+		return
+	}
+	list, err := h.store.ListPublic(r.Context(), id.String())
+	if err != nil {
+		httpx.Internal(w, err)
+		return
+	}
+	if list == nil {
+		list = []Collection{}
+	}
+	httpx.JSON(w, http.StatusOK, list)
 }
 
 func (h *Handler) bulkVisibility(w http.ResponseWriter, r *http.Request) {

@@ -54,7 +54,9 @@ export const api = {
   me: () => request<User>('/me'),
   updateMe: (input: UserSettingsInput) => request<User>('/me', { method: 'PUT', json: input }),
   publicUser: (id: string) => request<PublicUser>(`/users/${id}`),
-  userItems: (id: string) => request<Item[]>(`/users/${id}/items`),
+  publicCollections: (id: string) => request<Collection[]>(`/users/${id}/collections`),
+  userItems: (id: string, folderId?: string) =>
+    request<Item[]>(`/users/${id}/items${folderId ? `?collection=${folderId}` : ''}`),
   logout: () => request<void>('/auth/logout', { method: 'POST' }),
 
   listItems: (f: ItemFilter) => {

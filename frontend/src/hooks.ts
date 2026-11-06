@@ -50,11 +50,19 @@ export function usePublicUser(id: string) {
   })
 }
 
-export function useUserItems(id: string) {
+export function usePublicCollections(id: string) {
   return useQuery({
-    queryKey: ['user-items', id],
-    queryFn: () => api.userItems(id),
+    queryKey: ['user-collections', id],
+    queryFn: () => api.publicCollections(id),
     enabled: id !== '',
+  })
+}
+
+export function useUserItems(id: string, folderId: string) {
+  return useQuery({
+    queryKey: ['user-items', id, folderId],
+    queryFn: () => api.userItems(id, folderId),
+    enabled: id !== '' && folderId !== '',
   })
 }
 

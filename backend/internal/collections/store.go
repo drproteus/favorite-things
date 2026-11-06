@@ -79,6 +79,26 @@ func (s *Store) List(ctx context.Context, userID string) ([]Collection, error) {
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (Collection, error) { return scanCollection(r) })
 }
 
+// ListPublic returns the folders of one user that anyone can see: each folder and every folder above
+// it must be public. The root folder is always public.
+func (s *Store) ListPublic(ctx context.Context, userID string) ([]Collection, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT c.id::text, c.parent_id::text, c.name, c.visibility, c.created_at, c.updated_at
+		FROM collections c
+		WHERE c.owner_id = $1::uuid AND NOT EXISTS (
+			WITH RECURSIVE up AS (
+				SELECT id, parent_id, visibility FROM collections WHERE id = c.id
+				UNION ALL
+				SELECT p.id, p.parent_id, p.visibility FROM collections p JOIN up ON p.id = up.parent_id
+			)
+			SELECT 1 FROM up WHERE visibility = 'private')
+		ORDER BY c.parent_id IS NOT NULL, lower(c.name)`, userID)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (Collection, error) { return scanCollection(r) })
+}
+
 // Get returns the user's folder, or nil if it doesn't exist or belongs to someone else.
 func (s *Store) Get(ctx context.Context, userID, id string) (*Collection, error) {
 	return get(ctx, s.pool, userID, id)

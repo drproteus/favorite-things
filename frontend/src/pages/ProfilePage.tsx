@@ -1,67 +1,154 @@
-import { Link, useParams } from 'react-router-dom'
-import { Compass, Settings } from 'lucide-react'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { ChevronRight, Compass, Folder, Settings } from 'lucide-react'
 import ItemCard from '../components/ItemCard'
 import Markdown from '../components/Markdown'
 import { EmptyState, ErrorState, Loading } from '../components/Status'
-import { useMe, usePublicUser, useUserItems } from '../hooks'
-import { btnSecondary } from '../ui'
+import { childrenOf, pathTo, rootFolder } from '../folders'
+import { useMe, usePublicCollections, usePublicUser, useUserItems } from '../hooks'
+import type { Collection, PublicUser } from '../types'
+import { btnSecondary, card } from '../ui'
 
 export default function ProfilePage() {
   const { id = '' } = useParams()
   const profile = usePublicUser(id)
-  const items = useUserItems(id)
+  const folders = usePublicCollections(id)
   const me = useMe()
 
-  if (profile.isPending) return <Loading />
+  if (profile.isPending || folders.isPending) return <Loading />
   if (profile.error) return <ErrorState message={profile.error.message || 'User not found.'} />
+  if (folders.error) return <ErrorState message={folders.error.message} />
 
   const user = profile.data
   const isMe = me.data?.id === user.id
+  const root = rootFolder(folders.data)
 
   return (
     <div className="space-y-8">
-      <header className="flex flex-wrap items-start gap-5">
-        {user.avatarUrl ? (
-          <img src={user.avatarUrl} alt="" className="h-20 w-20 rounded-full" referrerPolicy="no-referrer" />
-        ) : (
-          <span className="flex h-20 w-20 items-center justify-center rounded-full bg-stone-200 text-2xl font-semibold dark:bg-stone-700">
-            {user.name.charAt(0).toUpperCase()}
-          </span>
-        )}
-        <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{user.name}</h1>
-          {user.profile ? (
-            <Markdown text={user.profile} className="mt-2 text-stone-700 dark:text-stone-300" />
-          ) : (
-            <p className="mt-2 text-sm text-stone-500 dark:text-stone-400">
-              {isMe ? 'Add a profile so other collectors know who you are.' : 'No profile yet.'}
-            </p>
-          )}
-        </div>
-        {isMe && (
-          <Link to="/settings" className={btnSecondary}>
-            <Settings size={16} /> Edit settings
-          </Link>
-        )}
-      </header>
+      <Header user={user} isMe={isMe} />
+      {root ? (
+        <FolderView userId={user.id} folders={folders.data} root={root} ownerName={user.name} />
+      ) : (
+        <EmptyState icon={<Compass size={40} />} title="Nothing public yet">
+          {isMe ? 'Items you mark as public will show up here.' : 'This collector has no public items yet.'}
+        </EmptyState>
+      )}
+    </div>
+  )
+}
 
-      <section className="space-y-4">
-        <h2 className="text-lg font-semibold">Public items</h2>
-        {items.isPending && <Loading />}
-        {items.isError && <ErrorState message={items.error.message} />}
-        {items.data &&
-          (items.data.length === 0 ? (
-            <EmptyState icon={<Compass size={40} />} title="Nothing public yet">
-              {isMe ? 'Items you mark as public will show up here.' : 'This collector has no public items yet.'}
-            </EmptyState>
-          ) : (
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {items.data.map((item) => (
-                <ItemCard key={item.id} item={item} />
-              ))}
-            </div>
+function Header({ user, isMe }: { user: PublicUser; isMe: boolean }) {
+  return (
+    <header className="flex flex-wrap items-start gap-5">
+      {user.avatarUrl ? (
+        <img src={user.avatarUrl} alt="" className="h-20 w-20 rounded-full" referrerPolicy="no-referrer" />
+      ) : (
+        <span className="flex h-20 w-20 items-center justify-center rounded-full bg-stone-200 text-2xl font-semibold dark:bg-stone-700">
+          {user.name.charAt(0).toUpperCase()}
+        </span>
+      )}
+      <div className="min-w-0 flex-1">
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{user.name}</h1>
+        {user.profile ? (
+          <Markdown text={user.profile} className="mt-2 text-stone-700 dark:text-stone-300" />
+        ) : (
+          <p className="mt-2 text-sm text-stone-500 dark:text-stone-400">
+            {isMe ? 'Add a profile so other collectors know who you are.' : 'No profile yet.'}
+          </p>
+        )}
+      </div>
+      {isMe && (
+        <Link to="/settings" className={btnSecondary}>
+          <Settings size={16} /> Edit settings
+        </Link>
+      )}
+    </header>
+  )
+}
+
+// The public part of the owner's folder tree, browsed the same way as the owner's own collection view.
+function FolderView({
+  userId,
+  folders,
+  root,
+  ownerName,
+}: {
+  userId: string
+  folders: Collection[]
+  root: Collection
+  ownerName: string
+}) {
+  const [params, setParams] = useSearchParams()
+  const current = folders.find((c) => c.id === params.get('folder')) ?? root
+  const path = pathTo(folders, current.id)
+  const subfolders = childrenOf(folders, current.id)
+  const go = (id: string) => setParams(id === root.id ? {} : { folder: id })
+  const nameOf = (f: Collection) => (f.parentId === null ? `${ownerName}'s collection` : f.name)
+
+  return (
+    <section className="space-y-5">
+      <nav aria-label="Folder path" className="flex flex-wrap items-center gap-1 text-sm text-stone-500 dark:text-stone-400">
+        {path.map((f, i) => (
+          <span key={f.id} className="flex items-center gap-1">
+            {i > 0 && <ChevronRight size={14} />}
+            {i === path.length - 1 ? (
+              <span className="font-medium text-stone-800 dark:text-stone-200">{nameOf(f)}</span>
+            ) : (
+              <button type="button" onClick={() => go(f.id)} className="cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400">
+                {nameOf(f)}
+              </button>
+            )}
+          </span>
+        ))}
+      </nav>
+
+      {subfolders.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {subfolders.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => go(f.id)}
+              className={`${card} flex cursor-pointer items-center gap-3 p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md`}
+            >
+              <Folder size={20} className="shrink-0 text-indigo-500" />
+              <span className="block truncate font-medium">{f.name}</span>
+            </button>
           ))}
-      </section>
+        </div>
+      )}
+
+      <FolderItems userId={userId} folderId={current.id} isRoot={current.id === root.id} hasFolders={subfolders.length > 0} />
+    </section>
+  )
+}
+
+function FolderItems({
+  userId,
+  folderId,
+  isRoot,
+  hasFolders,
+}: {
+  userId: string
+  folderId: string
+  isRoot: boolean
+  hasFolders: boolean
+}) {
+  const items = useUserItems(userId, folderId)
+  if (items.isPending) return <Loading />
+  if (items.isError) return <ErrorState message={items.error.message} />
+  if (items.data.length === 0) {
+    if (hasFolders) return null
+    return (
+      <EmptyState icon={<Compass size={40} />} title={isRoot ? 'Nothing public yet' : 'Nothing public here'}>
+        Items shared as public show up here.
+      </EmptyState>
+    )
+  }
+  return (
+    <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {items.data.map((item) => (
+        <ItemCard key={item.id} item={item} />
+      ))}
     </div>
   )
 }

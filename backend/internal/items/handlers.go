@@ -225,15 +225,25 @@ func (h *Handler) popularTags(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, list)
 }
 
-// userItems lists the public items of one user, for their profile page.
+// userItems lists the public items of one user, for their profile page. With ?collection=, only the
+// items in that folder. Items inside a private folder never appear.
 func (h *Handler) userItems(w http.ResponseWriter, r *http.Request) {
 	owner, ok := parseID(w, r.PathValue("id"))
 	if !ok {
 		return
 	}
 	q := r.URL.Query()
+	var folder string
+	if raw := q.Get("collection"); raw != "" {
+		id, ok := parseID(w, raw)
+		if !ok {
+			return
+		}
+		folder = id
+	}
 	list, err := h.store.List(r.Context(), Filter{
 		PublicOwnerID: owner,
+		CollectionID:  folder,
 		Limit:         queryInt(q.Get("limit"), 24, 1, 100),
 		Offset:        queryInt(q.Get("offset"), 0, 0, 1_000_000),
 	})
