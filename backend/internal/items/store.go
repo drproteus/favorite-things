@@ -2,6 +2,7 @@ package items
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"favorite-things/backend/internal/media"
 )
 
 type Item struct {
@@ -27,10 +30,14 @@ type Item struct {
 }
 
 type Image struct {
-	ID       string `json:"id"`
-	URL      string `json:"url"`
-	Position int    `json:"position"`
-	key      string
+	ID          string       `json:"id"`
+	URL         string       `json:"url"`
+	Width       int          `json:"width,omitempty"`
+	Height      int          `json:"height,omitempty"`
+	Variants    []media.View `json:"variants,omitempty"`
+	Position    int          `json:"position"`
+	key         string
+	variantMeta []media.Variant
 }
 
 type Filter struct {
@@ -172,9 +179,16 @@ func (s *Store) Delete(ctx context.Context, ownerID, id string) ([]string, bool,
 	defer tx.Rollback(ctx)
 
 	rows, err := tx.Query(ctx, `
-		SELECT ii.s3_key FROM item_images ii
-		JOIN items i ON i.id = ii.item_id
-		WHERE i.id = $2::uuid AND i.owner_id = $1::uuid`, ownerID, id)
+		SELECT key FROM (
+			SELECT ii.s3_key AS key FROM item_images ii
+			JOIN items i ON i.id = ii.item_id
+			WHERE i.id = $2::uuid AND i.owner_id = $1::uuid
+			UNION ALL
+			SELECT v->>'key' FROM item_images ii
+			JOIN items i ON i.id = ii.item_id
+			CROSS JOIN LATERAL jsonb_array_elements(ii.variants) v
+			WHERE i.id = $2::uuid AND i.owner_id = $1::uuid
+		) keys`, ownerID, id)
 	if err != nil {
 		return nil, false, err
 	}
@@ -193,39 +207,55 @@ func (s *Store) Delete(ctx context.Context, ownerID, id string) ([]string, bool,
 	return keys, true, tx.Commit(ctx)
 }
 
-// AddImage appends an image unless the item already has max images.
-func (s *Store) AddImage(ctx context.Context, itemID, key, contentType string, size int64, max int) (Image, bool, error) {
+// AddImage appends an image and its generated variants unless the item already has max images.
+func (s *Store) AddImage(ctx context.Context, itemID, key, contentType string, size int64, width, height int, variants []media.Variant, max int) (Image, bool, error) {
+	variantsJSON, err := media.MarshalVariants(variants)
+	if err != nil {
+		return Image{}, false, err
+	}
+
 	var img Image
-	err := s.pool.QueryRow(ctx, `
-		INSERT INTO item_images (item_id, s3_key, content_type, size_bytes, position)
-		SELECT $1::uuid, $2::text, $3::text, $4::bigint, COALESCE(MAX(position) + 1, 0)
+	var stored []byte
+	err = s.pool.QueryRow(ctx, `
+		INSERT INTO item_images (item_id, s3_key, content_type, size_bytes, width, height, variants, position)
+		SELECT $1::uuid, $2::text, $3::text, $4::bigint, $5::int, $6::int, $7::jsonb, COALESCE(MAX(position) + 1, 0)
 		FROM item_images WHERE item_id = $1::uuid
-		HAVING COUNT(*) < $5::int
-		RETURNING id::text, s3_key, position`,
-		itemID, key, contentType, size, max).Scan(&img.ID, &img.key, &img.Position)
+		HAVING COUNT(*) < $8::int
+		RETURNING id::text, s3_key, width, height, variants, position`,
+		itemID, key, contentType, size, width, height, variantsJSON, max).
+		Scan(&img.ID, &img.key, &img.Width, &img.Height, &stored, &img.Position)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Image{}, false, nil
 	}
 	if err != nil {
 		return Image{}, false, err
 	}
+	if err := json.Unmarshal(stored, &img.variantMeta); err != nil {
+		return Image{}, false, err
+	}
 	return img, true, nil
 }
 
-func (s *Store) DeleteImage(ctx context.Context, ownerID, itemID, imageID string) (string, bool, error) {
-	var key string
+// DeleteImage removes an image and returns it so the caller can delete its files.
+func (s *Store) DeleteImage(ctx context.Context, ownerID, itemID, imageID string) (Image, bool, error) {
+	var img Image
+	var stored []byte
 	err := s.pool.QueryRow(ctx, `
 		DELETE FROM item_images ii USING items i
 		WHERE ii.id = $1::uuid AND ii.item_id = $2::uuid
 		  AND i.id = ii.item_id AND i.owner_id = $3::uuid
-		RETURNING ii.s3_key`, imageID, itemID, ownerID).Scan(&key)
+		RETURNING ii.id::text, ii.s3_key, ii.width, ii.height, ii.variants, ii.position`,
+		imageID, itemID, ownerID).Scan(&img.ID, &img.key, &img.Width, &img.Height, &stored, &img.Position)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", false, nil
+		return Image{}, false, nil
 	}
 	if err != nil {
-		return "", false, err
+		return Image{}, false, err
 	}
-	return key, true, nil
+	if err := json.Unmarshal(stored, &img.variantMeta); err != nil {
+		return Image{}, false, err
+	}
+	return img, true, nil
 }
 
 // SetRating stores the owner's rating for their own item. A nil rating clears it.
@@ -270,9 +300,16 @@ func (s *Store) DeleteMany(ctx context.Context, ownerID string, ids []string) ([
 	defer tx.Rollback(ctx)
 
 	rows, err := tx.Query(ctx, `
-		SELECT ii.s3_key FROM item_images ii
-		JOIN items i ON i.id = ii.item_id
-		WHERE i.owner_id = $1::uuid AND i.id = ANY($2::uuid[])`, ownerID, ids)
+		SELECT key FROM (
+			SELECT ii.s3_key AS key FROM item_images ii
+			JOIN items i ON i.id = ii.item_id
+			WHERE i.owner_id = $1::uuid AND i.id = ANY($2::uuid[])
+			UNION ALL
+			SELECT v->>'key' FROM item_images ii
+			JOIN items i ON i.id = ii.item_id
+			CROSS JOIN LATERAL jsonb_array_elements(ii.variants) v
+			WHERE i.owner_id = $1::uuid AND i.id = ANY($2::uuid[])
+		) keys`, ownerID, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -311,7 +348,7 @@ func (s *Store) loadImages(ctx context.Context, list []Item) error {
 	}
 
 	imgRows, err := s.pool.Query(ctx, `
-		SELECT id::text, item_id::text, s3_key, position FROM item_images
+		SELECT id::text, item_id::text, s3_key, width, height, variants, position FROM item_images
 		WHERE item_id = ANY($1) ORDER BY position, created_at`, ids)
 	if err != nil {
 		return err
@@ -319,7 +356,12 @@ func (s *Store) loadImages(ctx context.Context, list []Item) error {
 	for imgRows.Next() {
 		var itemID string
 		var img Image
-		if err := imgRows.Scan(&img.ID, &itemID, &img.key, &img.Position); err != nil {
+		var stored []byte
+		if err := imgRows.Scan(&img.ID, &itemID, &img.key, &img.Width, &img.Height, &stored, &img.Position); err != nil {
+			imgRows.Close()
+			return err
+		}
+		if err := json.Unmarshal(stored, &img.variantMeta); err != nil {
 			imgRows.Close()
 			return err
 		}

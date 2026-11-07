@@ -4,12 +4,15 @@ package collections
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"favorite-things/backend/internal/media"
 )
 
 const RootName = "My collection"
@@ -22,15 +25,19 @@ var (
 )
 
 type Collection struct {
-	ID          string    `json:"id"`
-	ParentID    *string   `json:"parentId"`
-	Name        string    `json:"name"`
-	Visibility  string    `json:"visibility"`
-	Description string    `json:"description"`
-	BannerKey   *string   `json:"-"`
-	BannerURL   *string   `json:"bannerUrl"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	ID             string       `json:"id"`
+	ParentID       *string      `json:"parentId"`
+	Name           string       `json:"name"`
+	Visibility     string       `json:"visibility"`
+	Description    string       `json:"description"`
+	BannerKey      *string      `json:"-"`
+	BannerURL      *string      `json:"bannerUrl"`
+	BannerWidth    int          `json:"bannerWidth,omitempty"`
+	BannerHeight   int          `json:"bannerHeight,omitempty"`
+	BannerVariants []media.View `json:"bannerVariants,omitempty"`
+	CreatedAt      time.Time    `json:"createdAt"`
+	UpdatedAt      time.Time    `json:"updatedAt"`
+	bannerMeta     []media.Variant
 }
 
 // DeleteMode says what happens to a folder's contents when the folder is deleted.
@@ -73,7 +80,7 @@ func (s *Store) RootID(ctx context.Context, userID string) (string, error) {
 // List returns every folder the user owns, root first.
 func (s *Store) List(ctx context.Context, userID string) ([]Collection, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id::text, parent_id::text, name, visibility, description, banner_key, created_at, updated_at
+		SELECT id::text, parent_id::text, name, visibility, description, banner_key, banner_width, banner_height, banner_variants, created_at, updated_at
 		FROM collections WHERE owner_id = $1::uuid
 		ORDER BY parent_id IS NOT NULL, lower(name)`, userID)
 	if err != nil {
@@ -86,7 +93,8 @@ func (s *Store) List(ctx context.Context, userID string) ([]Collection, error) {
 // it must be public. The root folder is always public.
 func (s *Store) ListPublic(ctx context.Context, userID string) ([]Collection, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT c.id::text, c.parent_id::text, c.name, c.visibility, c.description, c.banner_key, c.created_at, c.updated_at
+		SELECT c.id::text, c.parent_id::text, c.name, c.visibility, c.description, c.banner_key,
+			c.banner_width, c.banner_height, c.banner_variants, c.created_at, c.updated_at
 		FROM collections c
 		WHERE c.owner_id = $1::uuid AND NOT EXISTS (
 			WITH RECURSIVE up AS (
@@ -109,7 +117,7 @@ func (s *Store) Get(ctx context.Context, userID, id string) (*Collection, error)
 
 func get(ctx context.Context, q queryer, userID, id string) (*Collection, error) {
 	row := q.QueryRow(ctx, `
-		SELECT id::text, parent_id::text, name, visibility, description, banner_key, created_at, updated_at
+		SELECT id::text, parent_id::text, name, visibility, description, banner_key, banner_width, banner_height, banner_variants, created_at, updated_at
 		FROM collections WHERE id = $2::uuid AND owner_id = $1::uuid`, userID, id)
 	c, err := scanCollection(row)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -132,15 +140,16 @@ func (s *Store) Create(ctx context.Context, userID, parentID, name, visibility s
 	row := s.pool.QueryRow(ctx, `
 		INSERT INTO collections (owner_id, parent_id, name, visibility)
 		VALUES ($1::uuid, $2::uuid, $3, $4)
-		RETURNING id::text, parent_id::text, name, visibility, description, banner_key, created_at, updated_at`,
+		RETURNING id::text, parent_id::text, name, visibility, description, banner_key, banner_width, banner_height, banner_variants, created_at, updated_at`,
 		userID, parentID, name, visibility)
 	c, err := scanCollection(row)
 	return c, mapErr(err)
 }
 
-// SetBanner sets or clears (nil key) a folder's banner image and returns the previous key so the caller
-// can delete the old file. The root folder can't have a banner.
-func (s *Store) SetBanner(ctx context.Context, userID, id string, key *string) (*string, error) {
+// SetBanner sets or clears (nil key) a folder's banner image and returns the previous
+// banner's storage keys so the caller can delete those files. The root folder can't
+// have a banner.
+func (s *Store) SetBanner(ctx context.Context, userID, id string, key *string, width, height int, variants []media.Variant) ([]string, error) {
 	current, err := get(ctx, s.pool, userID, id)
 	if err != nil {
 		return nil, err
@@ -151,12 +160,24 @@ func (s *Store) SetBanner(ctx context.Context, userID, id string, key *string) (
 	if current.ParentID == nil {
 		return nil, ErrRoot
 	}
-	if _, err := s.pool.Exec(ctx,
-		`UPDATE collections SET banner_key = $3, updated_at = now() WHERE id = $2::uuid AND owner_id = $1::uuid`,
-		userID, id, key); err != nil {
+
+	var oldKeys []string
+	if current.BannerKey != nil {
+		oldKeys = media.Keys(*current.BannerKey, current.bannerMeta)
+	}
+
+	variantsJSON, err := media.MarshalVariants(variants)
+	if err != nil {
 		return nil, err
 	}
-	return current.BannerKey, nil
+	if _, err := s.pool.Exec(ctx, `
+		UPDATE collections SET banner_key = $3, banner_width = $4, banner_height = $5,
+			banner_variants = $6::jsonb, updated_at = now()
+		WHERE id = $2::uuid AND owner_id = $1::uuid`,
+		userID, id, key, width, height, variantsJSON); err != nil {
+		return nil, err
+	}
+	return oldKeys, nil
 }
 
 // Update changes a folder's name, visibility, parent and description. The root folder can't be changed.
@@ -185,7 +206,7 @@ func (s *Store) Update(ctx context.Context, userID, id, name, visibility, parent
 	row := tx.QueryRow(ctx, `
 		UPDATE collections SET name = $3, visibility = $4, parent_id = $5::uuid, description = $6, updated_at = now()
 		WHERE id = $2::uuid AND owner_id = $1::uuid
-		RETURNING id::text, parent_id::text, name, visibility, description, banner_key, created_at, updated_at`,
+		RETURNING id::text, parent_id::text, name, visibility, description, banner_key, banner_width, banner_height, banner_variants, created_at, updated_at`,
 		userID, id, name, visibility, parentID, description)
 	c, err := scanCollection(row)
 	if err != nil {
@@ -355,9 +376,16 @@ func deleteInTx(ctx context.Context, tx pgx.Tx, userID, id string, mode DeleteMo
 	}
 
 	rows, err := tx.Query(ctx, subtreeCTE+`
-		SELECT ii.s3_key FROM item_images ii
-		JOIN items i ON i.id = ii.item_id
-		WHERE i.collection_id IN (SELECT id FROM subtree)`, id)
+		SELECT key FROM (
+			SELECT ii.s3_key AS key FROM item_images ii
+			JOIN items i ON i.id = ii.item_id
+			WHERE i.collection_id IN (SELECT id FROM subtree)
+			UNION ALL
+			SELECT v->>'key' FROM item_images ii
+			JOIN items i ON i.id = ii.item_id
+			CROSS JOIN LATERAL jsonb_array_elements(ii.variants) v
+			WHERE i.collection_id IN (SELECT id FROM subtree)
+		) keys`, id)
 	if err != nil {
 		return nil, err
 	}
@@ -416,6 +444,14 @@ func mapErr(err error) error {
 
 func scanCollection(row interface{ Scan(dest ...any) error }) (Collection, error) {
 	var c Collection
-	err := row.Scan(&c.ID, &c.ParentID, &c.Name, &c.Visibility, &c.Description, &c.BannerKey, &c.CreatedAt, &c.UpdatedAt)
-	return c, err
+	var variants []byte
+	err := row.Scan(&c.ID, &c.ParentID, &c.Name, &c.Visibility, &c.Description, &c.BannerKey,
+		&c.BannerWidth, &c.BannerHeight, &variants, &c.CreatedAt, &c.UpdatedAt)
+	if err != nil {
+		return c, err
+	}
+	if err := json.Unmarshal(variants, &c.bannerMeta); err != nil {
+		return Collection{}, err
+	}
+	return c, nil
 }

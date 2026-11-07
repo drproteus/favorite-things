@@ -14,6 +14,7 @@ import (
 
 	"favorite-things/backend/internal/auth"
 	"favorite-things/backend/internal/httpx"
+	"favorite-things/backend/internal/media"
 	"favorite-things/backend/internal/storage"
 )
 
@@ -74,7 +75,7 @@ func (h *Handler) publicList(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, list)
 }
 
-// sign adds a short-lived URL for the folder's banner, if it has one.
+// sign adds short-lived URLs for the folder's banner and its generated sizes.
 func (h *Handler) sign(ctx context.Context, c *Collection) error {
 	if c.BannerKey == nil {
 		return nil
@@ -84,6 +85,18 @@ func (h *Handler) sign(ctx context.Context, c *Collection) error {
 		return err
 	}
 	c.BannerURL = &url
+	if len(c.bannerMeta) == 0 {
+		return nil
+	}
+	views := make([]media.View, 0, len(c.bannerMeta))
+	for _, variant := range c.bannerMeta {
+		variantURL, err := h.files.URL(ctx, variant.Key)
+		if err != nil {
+			return err
+		}
+		views = append(views, media.View{URL: variantURL, Width: variant.Width, Height: variant.Height})
+	}
+	c.BannerVariants = views
 	return nil
 }
 
@@ -136,14 +149,28 @@ func (h *Handler) uploadBanner(w http.ResponseWriter, r *http.Request) {
 		httpx.Internal(w, err)
 		return
 	}
-	old, err := h.store.SetBanner(r.Context(), u.ID, id, &key)
+
+	result, err := media.Process(data, key, contentType)
 	if err != nil {
-		h.removeObjects(r.Context(), []string{key})
+		slog.Warn("generate banner variants", "key", key, "error", err)
+	}
+	variants := make([]media.Variant, 0, len(result.Variants))
+	for _, v := range result.Variants {
+		if err := h.files.Put(r.Context(), v.Key, v.ContentType, v.Data); err != nil {
+			slog.Warn("store banner variant", "key", v.Key, "error", err)
+			continue
+		}
+		variants = append(variants, v)
+	}
+
+	oldKeys, err := h.store.SetBanner(r.Context(), u.ID, id, &key, result.Width, result.Height, variants)
+	if err != nil {
+		h.removeObjects(r.Context(), media.Keys(key, variants))
 		h.writeError(w, err)
 		return
 	}
-	if old != nil {
-		h.removeObjects(r.Context(), []string{*old})
+	if len(oldKeys) > 0 {
+		h.removeObjects(r.Context(), oldKeys)
 	}
 	h.writeFolder(w, r, u.ID, id, http.StatusOK)
 }
@@ -155,13 +182,13 @@ func (h *Handler) deleteBanner(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	old, err := h.store.SetBanner(r.Context(), u.ID, id, nil)
+	oldKeys, err := h.store.SetBanner(r.Context(), u.ID, id, nil, 0, 0, nil)
 	if err != nil {
 		h.writeError(w, err)
 		return
 	}
-	if old != nil {
-		h.removeObjects(r.Context(), []string{*old})
+	if len(oldKeys) > 0 {
+		h.removeObjects(r.Context(), oldKeys)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

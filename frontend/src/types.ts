@@ -23,9 +23,23 @@ export interface UserSettingsInput {
   defaultVisibility: Visibility
 }
 
-export interface ItemImage {
-  id: string
+export interface ImageVariant {
   url: string
+  width: number
+  height: number
+}
+
+// The fields needed to render a responsive image. Collections use the same shape
+// for their banner through bannerUrl/bannerVariants.
+export interface ImageSource {
+  url: string
+  width?: number
+  height?: number
+  variants?: ImageVariant[]
+}
+
+export interface ItemImage extends ImageSource {
+  id: string
   position: number
 }
 
@@ -36,6 +50,9 @@ export interface Collection {
   visibility: Visibility
   description: string
   bannerUrl: string | null
+  bannerWidth?: number
+  bannerHeight?: number
+  bannerVariants?: ImageVariant[]
   createdAt: string
   updatedAt: string
 }

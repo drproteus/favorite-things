@@ -6,6 +6,7 @@ import { api } from '../api'
 import { ErrorState, Loading } from '../components/Status'
 import { flattenFolders, rootFolder } from '../folders'
 import MarkdownField from '../components/MarkdownField'
+import ResponsiveImage from '../components/ResponsiveImage'
 import VisibilityToggle from '../components/VisibilityToggle'
 import { useCollections, useItem, useMe } from '../hooks'
 import { itemToInput, type Collection, type Item, type ItemInput, type Visibility } from '../types'
@@ -279,7 +280,12 @@ function ItemForm({
             <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4">
               {existingImages.map((img) => (
                 <li key={img.id} className="group relative aspect-square overflow-hidden rounded-xl bg-stone-100 dark:bg-stone-800">
-                  <img src={img.url} alt="" className="h-full w-full object-cover" />
+                  <ResponsiveImage
+                    image={img}
+                    sizes="(min-width: 640px) 180px, 33vw"
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
                   <button
                     type="button"
                     onClick={() => deleteExisting.mutate(img.id)}

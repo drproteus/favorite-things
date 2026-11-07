@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Check, Globe, ImageOff, Lock } from 'lucide-react'
 import type { Item } from '../types'
 import { card, chip } from '../ui'
+import ResponsiveImage from './ResponsiveImage'
 import StarRating from './StarRating'
 
 interface Props {
@@ -11,14 +12,20 @@ interface Props {
 }
 
 export default function ItemCard({ item, select }: Props) {
-  const cover = item.images[0]?.url
+  const cover = item.images[0]
   const isPublic = item.visibility === 'public'
 
   const details = (tagChip: (tag: string) => ReactNode): ReactNode => (
     <>
       <div className="aspect-4/3 bg-stone-100 dark:bg-stone-800">
         {cover ? (
-          <img src={cover} alt="" loading="lazy" className="h-full w-full object-cover transition group-hover:scale-105" />
+          <ResponsiveImage
+            image={cover}
+            sizes="(min-width: 1280px) 300px, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+            alt=""
+            loading="lazy"
+            className="h-full w-full object-cover transition group-hover:scale-105"
+          />
         ) : (
           <div className="flex h-full items-center justify-center text-stone-400">
             <ImageOff size={32} />

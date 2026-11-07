@@ -5,6 +5,7 @@ import { ArrowLeft, Check, Folder, Globe, ImageOff, Lock, Pencil, Share2, Chevro
 import { api } from '../api'
 import Markdown from '../components/Markdown'
 import { BulkMoveDialog } from '../components/BulkDialogs'
+import ResponsiveImage from '../components/ResponsiveImage'
 import StarRating from '../components/StarRating'
 import { ErrorState, Loading } from '../components/Status'
 import { pathTo } from '../folders'
@@ -120,13 +121,19 @@ function ItemView({ item }: { item: Item }) {
           <div className="relative flex aspect-4/3 items-center justify-center overflow-hidden rounded-2xl bg-stone-100 dark:bg-stone-800">
             {current ? (
               <>
-                <img
-                  src={current.url}
+                <ResponsiveImage
+                  image={current}
+                  sizes="320px"
                   alt=""
                   aria-hidden="true"
                   className="pointer-events-none absolute inset-0 h-full w-full scale-125 object-cover opacity-60 blur-2xl"
                 />
-                <img src={current.url} alt={item.title} className="relative h-full w-full object-contain" />
+                <ResponsiveImage
+                  image={current}
+                  sizes="(min-width: 1024px) 660px, 100vw"
+                  alt={item.title}
+                  className="relative h-full w-full object-contain"
+                />
               </>
             ) : (
               <div className="flex flex-col items-center gap-2 text-stone-400">
@@ -146,7 +153,7 @@ function ItemView({ item }: { item: Item }) {
                   className={`h-16 w-16 shrink-0 cursor-pointer overflow-hidden rounded-lg border-2 transition ${i === active ? 'border-indigo-500' : 'border-transparent opacity-70 hover:opacity-100'
                     }`}
                 >
-                  <img src={img.url} alt="" className="h-full w-full object-cover" />
+                  <ResponsiveImage image={img} sizes="64px" alt="" className="h-full w-full object-cover" />
                 </button>
               ))}
             </div>

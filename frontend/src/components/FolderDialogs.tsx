@@ -3,9 +3,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api'
 import { useMe } from '../hooks'
 import { childrenOf, flattenFolders } from '../folders'
-import type { Collection, DeleteContents, Visibility } from '../types'
+import type { Collection, DeleteContents, ImageSource, Visibility } from '../types'
 import { btnDanger, btnDangerMuted, btnPrimary, btnSecondary, card, input, label } from '../ui'
 import MarkdownField from './MarkdownField'
+import ResponsiveImage from './ResponsiveImage'
 
 export function Modal({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) {
   return (
@@ -43,7 +44,16 @@ export function FolderFormDialog({ folders, folder, defaultParentId, onClose, on
   const [parentId, setParentId] = useState(folder?.parentId ?? defaultParentId)
   const [recursive, setRecursive] = useState(false)
   const [description, setDescription] = useState(folder?.description ?? '')
-  const [banner, setBanner] = useState<string | null>(folder?.bannerUrl ?? null)
+  const [banner, setBanner] = useState<ImageSource | null>(
+    folder?.bannerUrl
+      ? {
+          url: folder.bannerUrl,
+          width: folder.bannerWidth,
+          height: folder.bannerHeight,
+          variants: folder.bannerVariants,
+        }
+      : null,
+  )
   const [bannerBusy, setBannerBusy] = useState(false)
   const [bannerError, setBannerError] = useState('')
   const visibilityChanged = editing && !isRoot && visibility !== folder.visibility
@@ -56,7 +66,16 @@ export function FolderFormDialog({ folders, folder, defaultParentId, onClose, on
     setBannerError('')
     try {
       const updated = await api.uploadFolderBanner(folder.id, file)
-      setBanner(updated.bannerUrl)
+      setBanner(
+        updated.bannerUrl
+          ? {
+              url: updated.bannerUrl,
+              width: updated.bannerWidth,
+              height: updated.bannerHeight,
+              variants: updated.bannerVariants,
+            }
+          : null,
+      )
       qc.invalidateQueries({ queryKey: ['collections'] })
     } catch (err) {
       setBannerError(err instanceof Error ? err.message : 'Upload failed')
@@ -173,7 +192,14 @@ export function FolderFormDialog({ folders, folder, defaultParentId, onClose, on
 
             <div className="space-y-2">
               <span className={label}>Banner image</span>
-              {banner && <img src={banner} alt="" className="h-28 w-full rounded-xl object-cover" />}
+              {banner && (
+                <ResponsiveImage
+                  image={banner}
+                  sizes="(min-width: 768px) 448px, 100vw"
+                  alt=""
+                  className="h-28 w-full rounded-xl object-cover"
+                />
+              )}
               <div className="flex flex-wrap items-center gap-2">
                 <label className={`${btnSecondary} ${bannerBusy ? 'pointer-events-none opacity-50' : ''}`}>
                   {bannerBusy ? 'Working…' : banner ? 'Replace image' : 'Add image'}

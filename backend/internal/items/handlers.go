@@ -16,6 +16,7 @@ import (
 	"favorite-things/backend/internal/auth"
 	"favorite-things/backend/internal/collections"
 	"favorite-things/backend/internal/httpx"
+	"favorite-things/backend/internal/media"
 	"favorite-things/backend/internal/storage"
 )
 
@@ -413,14 +414,29 @@ func (h *Handler) uploadImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	img, added, err := h.store.AddImage(r.Context(), id, key, contentType, int64(len(data)), maxImages)
+	// Decoding can fail for a malformed or unsupported image. The original still
+	// works, so log the problem and carry on without variants.
+	result, err := media.Process(data, key, contentType)
 	if err != nil {
-		h.removeObjects(r.Context(), []string{key})
+		slog.Warn("generate image variants", "key", key, "error", err)
+	}
+	variants := make([]media.Variant, 0, len(result.Variants))
+	for _, v := range result.Variants {
+		if err := h.files.Put(r.Context(), v.Key, v.ContentType, v.Data); err != nil {
+			slog.Warn("store image variant", "key", v.Key, "error", err)
+			continue
+		}
+		variants = append(variants, v)
+	}
+
+	img, added, err := h.store.AddImage(r.Context(), id, key, contentType, int64(len(data)), result.Width, result.Height, variants, maxImages)
+	if err != nil {
+		h.removeObjects(r.Context(), media.Keys(key, variants))
 		httpx.Internal(w, err)
 		return
 	}
 	if !added {
-		h.removeObjects(r.Context(), []string{key})
+		h.removeObjects(r.Context(), media.Keys(key, variants))
 		httpx.Error(w, http.StatusBadRequest, fmt.Sprintf("an item can have at most %d images", maxImages))
 		return
 	}
@@ -443,7 +459,7 @@ func (h *Handler) deleteImage(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	key, deleted, err := h.store.DeleteImage(r.Context(), u.ID, id, imageID)
+	img, deleted, err := h.store.DeleteImage(r.Context(), u.ID, id, imageID)
 	if err != nil {
 		httpx.Internal(w, err)
 		return
@@ -452,7 +468,7 @@ func (h *Handler) deleteImage(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusNotFound, "image not found")
 		return
 	}
-	h.removeObjects(r.Context(), []string{key})
+	h.removeObjects(r.Context(), media.Keys(img.key, img.variantMeta))
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -585,6 +601,18 @@ func (h *Handler) sign(ctx context.Context, images []Image) error {
 			return err
 		}
 		images[i].URL = url
+		if len(images[i].variantMeta) == 0 {
+			continue
+		}
+		views := make([]media.View, 0, len(images[i].variantMeta))
+		for _, variant := range images[i].variantMeta {
+			variantURL, err := h.files.URL(ctx, variant.Key)
+			if err != nil {
+				return err
+			}
+			views = append(views, media.View{URL: variantURL, Width: variant.Width, Height: variant.Height})
+		}
+		images[i].Variants = views
 	}
 	return nil
 }

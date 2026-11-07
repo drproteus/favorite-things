@@ -154,6 +154,7 @@ This starts Postgres, MinIO and the app at http://localhost:8080. Put your OAuth
 
 - Serve over HTTPS and set `COOKIE_SECURE=true`. Set `PUBLIC_URL` and `FRONTEND_URL` to your public origins. When the app is served by the Go binary, `FRONTEND_URL` is the same as `PUBLIC_URL`.
 - Images are served through presigned URLs that expire after one hour, so the bucket can stay private. Set `S3_PUBLIC_ENDPOINT` if the browser needs a different host from the one the API uses to reach storage.
+- On upload, each photo and folder banner gets 320, 640, 960, 1280 and 1920 px variants (never upscaled). The API returns their URLs, and the web app uses `srcset`/`sizes` so the browser downloads the smallest version that fits each element. Animated GIFs keep their original file.
 - For AWS S3, set `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, set `S3_ENDPOINT` to empty (or your region's endpoint), set `S3_PATH_STYLE=false`, and create the bucket yourself. `EnsureBucket` only creates buckets in `us-east-1`-style setups. The local MinIO defaults only apply when the AWS credentials are unset.
 - Migrations run automatically at startup and are tracked in `schema_migrations`.
 
