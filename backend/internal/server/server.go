@@ -7,6 +7,7 @@ import (
 
 	"favorite-things/backend/internal/auth"
 	"favorite-things/backend/internal/collections"
+	"favorite-things/backend/internal/comments"
 	"favorite-things/backend/internal/config"
 	"favorite-things/backend/internal/httpx"
 	"favorite-things/backend/internal/items"
@@ -15,7 +16,7 @@ import (
 
 // New builds the HTTP handler: the JSON API under /api and, when WEB_DIR is set,
 // the built React app with an index.html fallback for client-side routes.
-func New(cfg config.Config, authSvc *auth.Service, authH *auth.Handler, itemsH *items.Handler, collectionsH *collections.Handler, suggestH *suggest.Handler) http.Handler {
+func New(cfg config.Config, authSvc *auth.Service, authH *auth.Handler, itemsH *items.Handler, collectionsH *collections.Handler, commentsH *comments.Handler, suggestH *suggest.Handler) http.Handler {
 	api := http.NewServeMux()
 	api.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -23,6 +24,7 @@ func New(cfg config.Config, authSvc *auth.Service, authH *auth.Handler, itemsH *
 	authH.Routes(api)
 	itemsH.Routes(api)
 	collectionsH.Routes(api)
+	commentsH.Routes(api)
 	suggestH.Routes(api)
 
 	root := http.NewServeMux()

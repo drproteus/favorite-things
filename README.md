@@ -17,7 +17,8 @@ A personal inventory and collection app. Catalog anything you collect (consoles,
 - Select mode in My collection: pick items and folders, then move them, change their visibility, or delete them together
 - Changing a folder's visibility can also apply to everything inside it
 - Profile page for each user at `/users/:id`, with a profile text and their public folders and items, browsed as a folder view. Anyone can see it. Private folders and everything inside them stay hidden
-- Descriptions and profiles support a markdown subset: bold, italic, links, lists, quotes and inline code. Raw HTML and headings are not rendered, and #hashtags link to Explore
+- Descriptions, profiles and comments support a markdown subset: bold, italic, links, lists, quotes and inline code. Raw HTML and headings are not rendered, and #hashtags link to Explore
+- Item owners can add and edit comments. Comments are visible only to signed-in users, even on public items
 - Settings page: profile text, and the default visibility for new items and folders (public by default)
 - Public or private visibility, toggled from the item page or the edit form
 - Explore page for public items, with search and tag filters, and the most-used public tags at the top. Tags on item pages link to Explore filtered by that tag
@@ -176,6 +177,9 @@ This starts Postgres, MinIO and the app at http://localhost:8080. Put your OAuth
 | DELETE | `/api/items/{id}/images/{imageId}` | owner | Remove photo |
 | PUT | `/api/items/{id}/rating` | owner | Set the rating `{ "rating": 1-5 }` |
 | DELETE | `/api/items/{id}/rating` | owner | Clear the rating |
+| GET | `/api/items/{id}/comments` | yes | Comments on an item visible to signed-in users |
+| POST | `/api/items/{id}/comments` | owner | Add a comment `{ "body" }`. Owner-only for now; visible to signed-in users |
+| PUT | `/api/items/{id}/comments/{commentId}` | author | Update a comment `{ "body" }` |
 | GET | `/api/collections` | yes | Your folders, including the root (the one with no `parentId`) |
 | POST | `/api/collections` | yes | Create `{ "name", "visibility", "parentId" }` (parent defaults to root) |
 | PUT | `/api/collections/{id}` | owner | Update `{ "name", "visibility", "parentId" }`; moves the folder. The root can't be changed |

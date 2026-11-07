@@ -15,6 +15,7 @@ import (
 
 	"favorite-things/backend/internal/auth"
 	"favorite-things/backend/internal/collections"
+	"favorite-things/backend/internal/comments"
 	"favorite-things/backend/internal/config"
 	"favorite-things/backend/internal/database"
 	"favorite-things/backend/internal/items"
@@ -78,12 +79,15 @@ func run() error {
 	suggestH := suggest.NewHandler(cfg.SuggestEnabled, model, cfg.SuggestDailyLimit)
 
 	authSvc := auth.NewService(pool, cfg.SessionTTL, cfg.CookieSecure)
+	itemStore := items.NewStore(pool)
+	folderStore := collections.NewStore(pool)
 	handler := server.New(
 		cfg,
 		authSvc,
 		auth.NewHandler(authSvc, cfg),
-		items.NewHandler(items.NewStore(pool), files, collections.NewStore(pool)),
-		collections.NewHandler(collections.NewStore(pool), files),
+		items.NewHandler(itemStore, files, folderStore),
+		collections.NewHandler(folderStore, files),
+		comments.NewHandler(comments.NewStore(pool), itemStore),
 		suggestH,
 	)
 

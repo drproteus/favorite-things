@@ -3,6 +3,8 @@ import type {
   CollectionInput,
   DeleteContents,
   Item,
+  ItemComment,
+  ItemCommentInput,
   ItemFilter,
   ItemImage,
   ItemInput,
@@ -88,6 +90,12 @@ export const api = {
   setRating: (itemId: string, rating: number) =>
     request<Item>(`/items/${itemId}/rating`, { method: 'PUT', json: { rating } }),
   clearRating: (itemId: string) => request<void>(`/items/${itemId}/rating`, { method: 'DELETE' }),
+
+  listComments: (itemId: string) => request<ItemComment[]>(`/items/${itemId}/comments`),
+  createComment: (itemId: string, input: ItemCommentInput) =>
+    request<ItemComment>(`/items/${itemId}/comments`, { method: 'POST', json: input }),
+  updateComment: (itemId: string, commentId: string, input: ItemCommentInput) =>
+    request<ItemComment>(`/items/${itemId}/comments/${commentId}`, { method: 'PUT', json: input }),
 
   popularTags: (limit = 12) => request<PopularTag[]>(`/tags/popular?limit=${limit}`),
 

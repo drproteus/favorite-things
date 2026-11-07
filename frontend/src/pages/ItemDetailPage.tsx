@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Check, Folder, Globe, ImageOff, Lock, Pencil, Share2, ChevronRight } from 'lucide-react'
 import { api } from '../api'
+import Comments from '../components/Comments'
 import Markdown from '../components/Markdown'
 import { BulkMoveDialog } from '../components/BulkDialogs'
 import ResponsiveImage from '../components/ResponsiveImage'
@@ -247,6 +248,8 @@ function ItemView({ item }: { item: Item }) {
           </div>
         </section>
       </div>
+
+      <Comments item={item} />
     </div>
   )
 }

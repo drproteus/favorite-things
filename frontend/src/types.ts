@@ -83,6 +83,26 @@ export interface Item {
   updatedAt: string
 }
 
+export type CommentVisibility = 'signed_in' | 'public' | 'private'
+
+export interface ItemComment {
+  id: string
+  itemId: string
+  authorId: string
+  authorName: string
+  authorAvatarUrl: string
+  body: string
+  visibility: CommentVisibility
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ItemCommentInput {
+  body: string
+  // Omitted when editing so the server keeps the comment's current visibility.
+  visibility?: CommentVisibility
+}
+
 export interface PopularTag {
   tag: string
   count: number

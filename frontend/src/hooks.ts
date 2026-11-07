@@ -21,6 +21,7 @@ export function useLogout() {
       qc.setQueryData(['me'], null)
       qc.removeQueries({ queryKey: ['items'] })
       qc.removeQueries({ queryKey: ['item'] })
+      qc.removeQueries({ queryKey: ['comments'] })
     },
   })
 }
@@ -38,6 +39,14 @@ export function useItem(id: string, enabled = true) {
     queryFn: () => api.getItem(id),
     enabled: enabled && id !== '',
     retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 2,
+  })
+}
+
+export function useComments(itemId: string, enabled = true) {
+  return useQuery({
+    queryKey: ['comments', itemId],
+    queryFn: () => api.listComments(itemId),
+    enabled: enabled && itemId !== '',
   })
 }
 
