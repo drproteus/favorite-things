@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { CheckSquare, ChevronRight, Folder, FolderPlus, Globe, Lock, MoveRight, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Check, CheckSquare, ChevronRight, Folder, FolderPlus, Globe, Lock, MoveRight, Pencil, Plus, Share2, Trash2 } from 'lucide-react'
 import { BulkDeleteDialog, BulkMoveDialog, BulkVisibilityDialog } from '../components/BulkDialogs'
 import { DeleteFolderDialog, FolderFormDialog } from '../components/FolderDialogs'
 import FolderHeader from '../components/FolderHeader'
@@ -9,7 +9,7 @@ import ItemBrowser from '../components/ItemBrowser'
 import { SelectMark } from '../components/ItemCard'
 import { ErrorState, Loading } from '../components/Status'
 import { childrenOf, pathTo, rootFolder } from '../folders'
-import { useCollections } from '../hooks'
+import { useCollections, useMe } from '../hooks'
 import type { Collection, Visibility } from '../types'
 import { btnGhost, btnPrimary, btnSecondary, card } from '../ui'
 
@@ -26,10 +26,12 @@ const toggled = (set: string[], id: string) => (set.includes(id) ? set.filter((x
 
 export default function CollectionPage() {
   const folders = useCollections()
+  const me = useMe()
   const [params, setParams] = useSearchParams()
   const [dialog, setDialog] = useState<Dialog>(null)
   const [selecting, setSelecting] = useState(false)
   const [picked, setPicked] = useState<Picked>({ itemIds: [], folderIds: [] })
+  const [copied, setCopied] = useState(false)
 
   if (folders.isPending) return <Loading />
   if (folders.error) return <ErrorState message={folders.error.message} />
@@ -42,6 +44,8 @@ export default function CollectionPage() {
   const isRoot = current.parentId === null
   const path = pathTo(list, current.id)
   const subfolders = childrenOf(list, current.id)
+  // A folder inside a private ancestor isn't reachable on the public site.
+  const shareable = !isRoot && path.every((folder) => folder.visibility === 'public')
 
   const clearSelection = () => {
     setSelecting(false)
@@ -55,15 +59,39 @@ export default function CollectionPage() {
     setDialog(null)
     clearSelection()
   }
+  const share = async () => {
+    if (!me.data) return
+    try {
+      const url = new URL(`/users/${me.data.id}/folders/${current.id}`, window.location.origin)
+      await navigator.clipboard.writeText(url.toString())
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // Clipboard may be unavailable (e.g. insecure context); the URL is still in the address bar.
+    }
+  }
 
   const pickedCount = picked.itemIds.length + picked.folderIds.length
 
   const actions = (
     <div className="flex flex-wrap items-center gap-2">
       {!selecting && !isRoot && (
-        <button type="button" onClick={() => setDialog('edit')} className={btnGhost} aria-label="Edit folder">
-          <Pencil size={16} />
-        </button>
+        <>
+          {shareable && (
+            <button
+              type="button"
+              onClick={share}
+              className={btnGhost}
+              aria-label={copied ? 'Link copied' : 'Copy share link'}
+              title={copied ? 'Link copied' : 'Copy share link'}
+            >
+              {copied ? <Check size={16} /> : <Share2 size={16} />}
+            </button>
+          )}
+          <button type="button" onClick={() => setDialog('edit')} className={btnGhost} aria-label="Edit folder">
+            <Pencil size={16} />
+          </button>
+        </>
       )}
       <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
         <button
