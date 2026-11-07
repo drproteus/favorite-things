@@ -44,8 +44,9 @@ export default function CollectionPage() {
   const isRoot = current.parentId === null
   const path = pathTo(list, current.id)
   const subfolders = childrenOf(list, current.id)
-  // A folder inside a private ancestor isn't reachable on the public site.
-  const shareable = !isRoot && path.every((folder) => folder.visibility === 'public')
+  // A folder inside a private ancestor isn't reachable on the public site. The root
+  // collection is shared through the owner's profile page.
+  const shareable = path.every((folder) => folder.visibility === 'public')
 
   const clearSelection = () => {
     setSelecting(false)
@@ -61,8 +62,9 @@ export default function CollectionPage() {
   }
   const share = async () => {
     if (!me.data) return
+    const sharePath = isRoot ? `/users/${me.data.id}` : `/users/${me.data.id}/folders/${current.id}`
     try {
-      const url = new URL(`/users/${me.data.id}/folders/${current.id}`, window.location.origin)
+      const url = new URL(sharePath, window.location.origin)
       await navigator.clipboard.writeText(url.toString())
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
@@ -75,7 +77,7 @@ export default function CollectionPage() {
 
   const actions = (
     <div className="flex flex-wrap items-center gap-2">
-      {!selecting && !isRoot && (
+      {!selecting && (
         <>
           {shareable && (
             <button
@@ -88,9 +90,11 @@ export default function CollectionPage() {
               {copied ? <Check size={16} /> : <Share2 size={16} />}
             </button>
           )}
-          <button type="button" onClick={() => setDialog('edit')} className={btnGhost} aria-label="Edit folder">
-            <Pencil size={16} />
-          </button>
+          {!isRoot && (
+            <button type="button" onClick={() => setDialog('edit')} className={btnGhost} aria-label="Edit folder">
+              <Pencil size={16} />
+            </button>
+          )}
         </>
       )}
       <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
